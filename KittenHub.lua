@@ -728,7 +728,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		FillDirection = Enum.FillDirection.Horizontal,
 		HorizontalAlignment = Enum.HorizontalAlignment.Right,
 		VerticalAlignment = Enum.VerticalAlignment.Center,
-		Padding = UDim.new(0, 2),
+		-- Without this the layout falls back to sorting by Name, which ordered the
+		-- controls alphabetically as Center, Close, Minimize.
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 4),
 		Parent = windowControls,
 	})
 
