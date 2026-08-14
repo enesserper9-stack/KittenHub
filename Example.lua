@@ -1,10 +1,33 @@
 -- KittenHub example / visual test
 
--- A fixed ?v= value keeps raw.githubusercontent serving that exact URL from its
--- CDN cache, so a fresh push can still load as the previous revision. The
--- timestamp makes every run a cache miss.
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=" .. tostring(os.time())
-local source = game:HttpGet(LIBRARY_URL, true)
+local REPO = "enesserper9-stack/KittenHub"
+local BRANCH = "main"
+
+local function httpGet(url: string): string?
+	local ok, body = pcall(game.HttpGet, game, url, true)
+	if ok and type(body) == "string" then
+		return body
+	end
+	return nil
+end
+
+-- Branch URLs are served from the raw.githubusercontent CDN, which can keep
+-- returning the previous revision for minutes after a push (query strings like
+-- ?v=... are not a reliable cache key). A commit URL is immutable, so resolving
+-- the branch head first guarantees the newest file.
+local function resolveLibraryUrl(): (string, string)
+	local body = httpGet("https://api.github.com/repos/" .. REPO .. "/commits/" .. BRANCH)
+	local commit = body and string.match(body, '"sha"%s*:%s*"(%x+)"') or nil
+	if commit then
+		return "https://raw.githubusercontent.com/" .. REPO .. "/" .. commit .. "/KittenHub.lua", commit
+	end
+	warn("[KittenHub Example] Commit cozumlenemedi, dal URL'sine dusuluyor (CDN bayat olabilir)")
+	return "https://raw.githubusercontent.com/" .. REPO .. "/" .. BRANCH .. "/KittenHub.lua?v=" .. tostring(os.time()), BRANCH
+end
+
+local LIBRARY_URL, LIBRARY_REF = resolveLibraryUrl()
+local source = httpGet(LIBRARY_URL)
+assert(source, "KittenHub indirilemedi: " .. LIBRARY_URL)
 local loader, compileError = loadstring(source)
 
 assert(loader, "KittenHub derlenemedi: " .. tostring(compileError))
@@ -15,9 +38,15 @@ assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulun
 local EXPECTED_VERSION = "0.5.4"
 assert(
 	KittenHub.Version == EXPECTED_VERSION,
-	"GitHub eski KittenHub surumunu dondurdu. Beklenen: " .. EXPECTED_VERSION .. ", gelen: " .. tostring(KittenHub.Version)
+	"GitHub eski KittenHub surumunu dondurdu. Beklenen: "
+		.. EXPECTED_VERSION
+		.. ", gelen: "
+		.. tostring(KittenHub.Version)
+		.. " (ref: "
+		.. LIBRARY_REF
+		.. ")"
 )
-warn("[KittenHub Example] Loaded version:", KittenHub.Version)
+warn("[KittenHub Example] Loaded version:", KittenHub.Version, "ref:", LIBRARY_REF)
 
 local Window = KittenHub:CreateWindow({
 	Title = "KittenHub",
