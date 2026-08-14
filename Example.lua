@@ -1,6 +1,6 @@
 -- KittenHub example / visual test
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=8"
+local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=9"
 local source = game:HttpGet(LIBRARY_URL, true)
 local loader, compileError = loadstring(source)
 
@@ -24,16 +24,22 @@ local Window = KittenHub:CreateWindow({
 		Sleeping = "rbxassetid://112356892711029",
 		Peek = "rbxassetid://133697879389288",
 		Curled = "rbxassetid://101414414893719",
-		DarkCat = "rbxassetid://94181148192573",
+		DarkCat = "rbxassetid://118910476036241",
 		DropdownCat = "rbxassetid://98425969504037",
 		Sparkles = "rbxassetid://114850152769331",
+		-- Upload assets/icon-*.png separately, then paste each image ID below.
+		Home = "rbxassetid://118174015024924",
+		Plus = "rbxassetid://98329354716868",
+		Players = "rbxassetid://125376145853165",
+		Settings = "rbxassetid://87200505076227",
+		Bell = "rbxassetid://80479928306450",
 	},
 })
 
-local Overview = Window:AddTab({ Name = "Overview", Icon = "◇" })
-local NewTab = Window:AddTab({ Name = "New Tab", Icon = "+" })
-local Players = Window:AddTab({ Name = "Players", Icon = "○" })
-local Settings = Window:AddTab({ Name = "Settings", Icon = "⚙" })
+local Overview = Window:AddTab({ Name = "Overview", Icon = "⌂", IconRole = "Home" })
+local NewTab = Window:AddTab({ Name = "New Tab", Icon = "+", IconRole = "Plus" })
+local Players = Window:AddTab({ Name = "Players", Icon = "●", IconRole = "Players" })
+local Settings = Window:AddTab({ Name = "Settings", Icon = "⚙", IconRole = "Settings" })
 
 local General = Overview:AddSection("General")
 General:AddLabel({
@@ -43,6 +49,7 @@ General:AddLabel({
 General:AddButton({
 	Text = "Notification",
 	Description = "Show a small KittenHub notification.",
+	IconRole = "Bell",
 	ButtonText = "Show",
 	Callback = function()
 		Window:Notify({
