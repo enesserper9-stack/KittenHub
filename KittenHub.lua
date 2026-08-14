@@ -446,9 +446,12 @@ local function spriteOrGlyph(parent: Instance, properties: {[string]: any}, asse
 end
 
 local function addSoftPattern(parent: Instance, assets: {[string]: any})
+	-- Kept below the upper third and faint. The old set put marks at y 0.12 and
+	-- 0.16, right where page titles and section headers sit, so they read as
+	-- specks stuck to the headings rather than as background texture.
 	local marks = {
-		{0.08, 0.12, 18, 0.84}, {0.23, 0.34, 26, 0.9}, {0.47, 0.16, 16, 0.92},
-		{0.66, 0.58, 25, 0.89}, {0.88, 0.31, 18, 0.91}, {0.76, 0.86, 14, 0.92},
+		{0.10, 0.63, 20, 0.93}, {0.31, 0.87, 16, 0.94}, {0.55, 0.74, 22, 0.93},
+		{0.86, 0.66, 18, 0.94}, {0.93, 0.91, 14, 0.95},
 	}
 	for index, mark in ipairs(marks) do
 		local item = spriteOrGlyph(parent, {
@@ -746,21 +749,25 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		TextSize = 34,
 		Parent = brand,
 	})
+	-- The paw sat at x 264..296 and the sparkles at x 258..294, so the two drew on
+	-- top of each other. The sparkles move up to the corner above the logo, which
+	-- is where the reference art places them.
 	spriteOrGlyph(brand, {
+		Name = "BrandPaw",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.fromOffset(32, 32),
+		Position = UDim2.new(1, -12, 0.5, 2),
+		Size = UDim2.fromOffset(30, 30),
 		TextSize = 21,
 		ImageTransparency = 0.08,
 		TextTransparency = 0.08,
 	}, assets, "Paw", "✦")
 	spriteOrGlyph(brand, {
 		Name = "BrandSparkles",
-		Position = UDim2.fromOffset(258, 10),
-		Size = UDim2.fromOffset(36, 30),
-		ImageTransparency = 0.05,
-		TextTransparency = 0.05,
-		TextSize = 23,
+		Position = UDim2.fromOffset(12, 6),
+		Size = UDim2.fromOffset(26, 22),
+		ImageTransparency = 0.12,
+		TextTransparency = 0.12,
+		TextSize = 17,
 		ZIndex = 5,
 	}, assets, "Sparkles", "✧")
 
