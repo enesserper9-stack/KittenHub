@@ -1,6 +1,6 @@
 -- KittenHub example / visual test
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=11"
+local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=12"
 local source = game:HttpGet(LIBRARY_URL, true)
 local loader, compileError = loadstring(source)
 
@@ -9,6 +9,8 @@ assert(loader, "KittenHub derlenemedi: " .. tostring(compileError))
 local KittenHub = loader()
 assert(type(KittenHub) == "table", "KittenHub yukleyicisi tablo yerine " .. typeof(KittenHub) .. " dondurdu")
 assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulunamadi; GitHub dosyasi eski veya eksik")
+assert(KittenHub.Version == "0.5.3", "GitHub eski KittenHub surumunu dondurdu. Beklenen: 0.5.3, gelen: " .. tostring(KittenHub.Version))
+warn("[KittenHub Example] Loaded version:", KittenHub.Version)
 
 local Window = KittenHub:CreateWindow({
 	Title = "KittenHub",
