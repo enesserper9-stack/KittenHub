@@ -11,7 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
 KittenHub.__index = KittenHub
-KittenHub.Version = "0.3.0"
+KittenHub.Version = "0.4.1"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -20,6 +20,9 @@ KittenHub.DefaultAssets = {
 	Sleeping = "rbxassetid://112356892711029",
 	Peek = "rbxassetid://133697879389288",
 	Curled = "rbxassetid://101414414893719",
+	DarkCat = "rbxassetid://94181148192573",
+	DropdownCat = "rbxassetid://98425969504037",
+	Sparkles = "rbxassetid://114850152769331",
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
@@ -377,6 +380,9 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	assets.Sleeping = assets.Sleeping or KittenHub.DefaultAssets.Sleeping
 	assets.Peek = assets.Peek or KittenHub.DefaultAssets.Peek
 	assets.Curled = assets.Curled or KittenHub.DefaultAssets.Curled
+	assets.DarkCat = assets.DarkCat or KittenHub.DefaultAssets.DarkCat
+	assets.DropdownCat = assets.DropdownCat or KittenHub.DefaultAssets.DropdownCat
+	assets.Sparkles = assets.Sparkles or KittenHub.DefaultAssets.Sparkles
 	assets.RowIcon = assets.RowIcon or assets.Logo
 
 	local existing = getParent():FindFirstChild("KittenHubUI")
@@ -473,6 +479,15 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		ImageTransparency = 0.08,
 		TextTransparency = 0.08,
 	}, assets, "Paw", "✦")
+	spriteOrGlyph(brand, {
+		Name = "BrandSparkles",
+		Position = UDim2.fromOffset(258, 10),
+		Size = UDim2.fromOffset(36, 30),
+		ImageTransparency = 0.05,
+		TextTransparency = 0.05,
+		TextSize = 23,
+		ZIndex = 5,
+	}, assets, "Sparkles", "✧")
 
 	local windowControls = create("Frame", {
 		Name = "WindowControls",
@@ -641,10 +656,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	}) :: Frame
 	addSoftPattern(content, assets)
 	dashedLine(content, baseSize.Y - 120, 0, 0, 900)
-	spriteOrGlyph(content, {
+	spriteOrGlyph(root, {
 		Name = "BottomPaw",
 		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, 6, 1, 8),
+		Position = UDim2.new(1, 8, 1, 8),
 		Size = UDim2.fromOffset(72, 72),
 		ImageTransparency = 0,
 		TextTransparency = 0,
@@ -862,7 +877,7 @@ function WindowMethods:AddTab(options: any)
 		ImageTransparency = 0.28,
 		TextTransparency = 0.28,
 		TextSize = 17,
-	}, self.Assets, order == 1 and "Paw" or "Logo", "*")
+	}, self.Assets, order == 1 and "Paw" or ((self.Assets.DarkCat ~= "" and "DarkCat") or "Logo"), "*")
 
 	local page = create("ScrollingFrame", {
 		Name = tabName .. "Page",
@@ -1196,6 +1211,16 @@ function SectionMethods:AddToggle(options: any)
 		TextSize = 15,
 		ZIndex = 3,
 	}, self.Window.Assets, "Paw", "✦")
+	spriteOrGlyph(row, {
+		Name = "ToggleSparkles",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -108, 0.5, 0),
+		Size = UDim2.fromOffset(34, 28),
+		ImageTransparency = 0.1,
+		TextTransparency = 0.1,
+		TextSize = 20,
+		ZIndex = 4,
+	}, self.Window.Assets, "Sparkles", "✧")
 	local control = { Type = "Toggle", Value = options.Default == true, Instance = row }
 	function control:Set(value: boolean, silent: boolean?)
 		self.Value = value == true
@@ -1315,7 +1340,7 @@ function SectionMethods:AddDropdown(options: any)
 	options = options or {}
 	local text = options.Text or "Dropdown"
 	local values = options.Values or {}
-	local row = controlRow(self, 82, text, options.Description, options.IconRole or "Sleeping")
+	local row = controlRow(self, 82, text, options.Description, options.IconRole or "Peek")
 	local dropdown = button({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
@@ -1336,6 +1361,17 @@ function SectionMethods:AddDropdown(options: any)
 		TextSize = 16,
 		Parent = dropdown,
 	})
+	local dropdownCatRole = if self.Window.Assets.DropdownCat ~= "" then "DropdownCat" else "Peek"
+	spriteOrGlyph(dropdown, {
+		Name = "DropdownKitten",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -24, 0, 5),
+		Size = UDim2.fromOffset(58, 33),
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		TextSize = 18,
+		ZIndex = 8,
+	}, self.Window.Assets, dropdownCatRole, "^")
 	label({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
@@ -1348,7 +1384,8 @@ function SectionMethods:AddDropdown(options: any)
 	})
 	local list = create("Frame", {
 		Name = "Options",
-		Position = UDim2.new(0, 0, 1, 6),
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 0, -8),
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Theme.SurfaceHover,

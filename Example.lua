@@ -1,6 +1,6 @@
 -- KittenHub example / visual test
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=6"
+local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=8"
 local source = game:HttpGet(LIBRARY_URL, true)
 local loader, compileError = loadstring(source)
 
@@ -24,6 +24,9 @@ local Window = KittenHub:CreateWindow({
 		Sleeping = "rbxassetid://112356892711029",
 		Peek = "rbxassetid://133697879389288",
 		Curled = "rbxassetid://101414414893719",
+		DarkCat = "rbxassetid://94181148192573",
+		DropdownCat = "rbxassetid://98425969504037",
+		Sparkles = "rbxassetid://114850152769331",
 	},
 })
 

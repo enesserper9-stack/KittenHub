@@ -2,7 +2,7 @@
 
 KittenHub is an early-stage monochrome Roblox UI library inspired by the visual language of Project Real.
 
-The `0.3.0` visual refresh converts the Project Real / KittenHub reference into
+The `0.4.1` visual refresh converts the Project Real / KittenHub reference into
 Roblox-native UI: Fredoka One for playful display headings, Builder Sans for
 interface text, and Builder Mono for values, text inputs, and keybinds.
 
@@ -27,9 +27,9 @@ interface text, and Builder Mono for values, text inputs, and keybinds.
 
 - `KittenHub.lua` — library source
 - `Example.lua` — temporary visual/API test
-- `assets/separate/*.png` — six transparent decorations, uploaded separately
+- `assets/*.png` — all nine transparent UI assets in one folder
 
-Upload every PNG in `assets/separate` through Roblox Studio's Asset Manager.
+Upload every PNG in `assets` through Roblox Studio's Asset Manager.
 Copy each image dependency/texture ID into the matching `Assets` entry. Every
 decoration uses its own image ID; KittenHub no longer uses a sprite sheet or
 `ImageRectOffset`/`ImageRectSize`.
@@ -63,6 +63,9 @@ local Window = KittenHub:CreateWindow({
         Sleeping = "rbxassetid://112356892711029",
         Peek = "rbxassetid://133697879389288",
         Curled = "rbxassetid://101414414893719",
+        DarkCat = "rbxassetid://94181148192573",
+        DropdownCat = "rbxassetid://98425969504037",
+        Sparkles = "rbxassetid://114850152769331",
     },
 })
 
