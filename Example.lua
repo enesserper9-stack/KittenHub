@@ -1,6 +1,6 @@
 -- KittenHub example / visual test
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=3"
+local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=4"
 local source = game:HttpGet(LIBRARY_URL, true)
 local loader, compileError = loadstring(source)
 
@@ -13,10 +13,18 @@ assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulun
 local Window = KittenHub:CreateWindow({
 	Title = "KittenHub",
 	Icon = "rbxassetid://89700767026016",
-	Size = Vector2.new(1248, 687),
-	Scale = 0.8,
+	Size = Vector2.new(1280, 760),
+	Scale = 0.78,
 	PageTitle = "Home",
 	ToggleKey = Enum.KeyCode.RightShift,
+	Assets = {
+		SpriteSheet = "rbxassetid://75770413731434",
+		Logo = "rbxassetid://89700767026016",
+		RowIcon = "rbxassetid://89700767026016",
+		-- Paw = "rbxassetid://YOUR_PAW_ASSET",
+		-- Heart = "rbxassetid://YOUR_HEART_ASSET",
+		-- CornerCat = "rbxassetid://YOUR_CORNER_CAT_ASSET",
+	},
 })
 
 local Overview = Window:AddTab({ Name = "Overview", Icon = "◇" })
