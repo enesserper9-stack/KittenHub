@@ -188,13 +188,16 @@ local function updateResponsiveScale(window: any)
 	local viewport = camera.ViewportSize
 	local usableWidth = math.max(viewport.X - 40, 320)
 	local usableHeight = math.max(viewport.Y - 40, 240)
-	local scale = math.min(1, usableWidth / window._baseSize.X, usableHeight / window._baseSize.Y)
+	-- 1248x687 is the design canvas, not the final unscaled Roblox footprint.
+	-- A default 0.8 scale keeps the entire window near 1248x687 on 125% DPI displays.
+	local scale = math.min(window._designScale, usableWidth / window._baseSize.X, usableHeight / window._baseSize.Y)
 	window._uiScale.Scale = math.clamp(scale, 0.48, 1)
 end
 
 function KittenHub:CreateWindow(options: {[string]: any}?)
 	options = options or {}
 	local baseSize = options.Size or Vector2.new(1248, 687)
+	local designScale = options.Scale or 0.8
 	local title = options.Title or "KittenHub"
 	local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
 
@@ -269,46 +272,6 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		TextSize = 22,
 		Parent = brand,
 	})
-
-	local topNavigation = create("Frame", {
-		Name = "TopNavigation",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
-		Size = UDim2.fromOffset(220, 48),
-		BackgroundTransparency = 1,
-		Parent = topbar,
-	}) :: Frame
-
-	local navLayout = create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		VerticalAlignment = Enum.VerticalAlignment.Center,
-		Padding = UDim.new(0, 15),
-		Parent = topNavigation,
-	}) :: UIListLayout
-	local _ = navLayout
-
-	for index, symbol in ipairs({ "⌂", "</>", "●", "◇", "⚙" }) do
-		local navItem = button({
-			Name = "Navigation" .. index,
-			Size = UDim2.fromOffset(28, 42),
-			Text = symbol,
-			TextColor3 = index == 1 and Theme.Text or Theme.MutedText,
-			TextSize = index == 2 and 13 or 17,
-			LayoutOrder = index,
-			Parent = topNavigation,
-		})
-		if index == 1 then
-			create("Frame", {
-				AnchorPoint = Vector2.new(0.5, 1),
-				Position = UDim2.new(0.5, 0, 1, 0),
-				Size = UDim2.fromOffset(28, 1),
-				BackgroundColor3 = Theme.Text,
-				BorderSizePixel = 0,
-				Parent = navItem,
-			})
-		end
-	end
 
 	local windowControls = create("Frame", {
 		Name = "WindowControls",
@@ -476,6 +439,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Flags = {},
 		_connections = {},
 		_baseSize = baseSize,
+		_designScale = math.clamp(designScale, 0.48, 1),
 		_uiScale = uiScale,
 		_selectedTab = nil,
 		_visible = true,
