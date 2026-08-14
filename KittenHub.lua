@@ -5,6 +5,7 @@
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
+local ContentProvider = game:GetService("ContentProvider")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -130,6 +131,25 @@ end
 
 local function imageOrGlyph(parent: Instance, properties: {[string]: any}, imageId: string?, glyph: string): GuiObject
 	if imageId and imageId ~= "" then
+		local fallbackProperties = {
+			Name = (properties.Name or "Image") .. "Fallback",
+			AnchorPoint = properties.AnchorPoint or Vector2.zero,
+			Position = properties.Position or UDim2.fromOffset(0, 0),
+			Size = properties.Size or UDim2.fromScale(1, 1),
+			Rotation = properties.Rotation or 0,
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			FontFace = Fonts.Display,
+			Text = glyph,
+			TextColor3 = Theme.FaintText,
+			TextTransparency = properties.TextTransparency or 0,
+			TextSize = properties.TextSize or 18,
+			TextXAlignment = properties.TextXAlignment or Enum.TextXAlignment.Center,
+			TextYAlignment = properties.TextYAlignment or Enum.TextYAlignment.Center,
+			Visible = false,
+			ZIndex = properties.ZIndex or 1,
+			Parent = parent,
+		}
 		properties.TextTransparency = nil
 		properties.TextSize = nil
 		properties.TextXAlignment = nil
@@ -141,7 +161,28 @@ local function imageOrGlyph(parent: Instance, properties: {[string]: any}, image
 		properties.ScaleType = properties.ScaleType or Enum.ScaleType.Fit
 		properties.BackgroundTransparency = 1
 		properties.Parent = parent
-		return create("ImageLabel", properties) :: ImageLabel
+		local image = create("ImageLabel", properties) :: ImageLabel
+		local fallback = create("TextLabel", fallbackProperties) :: TextLabel
+		local warned = false
+		local function updateLoadedState()
+			if not image.Parent or not fallback.Parent then
+				return
+			end
+			image.Visible = image.IsLoaded
+			fallback.Visible = not image.IsLoaded
+			if not image.IsLoaded and not warned then
+				warned = true
+				warn("[KittenHub] Image asset could not be loaded:", imageId, "Check moderation and Asset Privacy/Open Use permissions.")
+			end
+		end
+		image:GetPropertyChangedSignal("IsLoaded"):Connect(updateLoadedState)
+		task.spawn(function()
+			pcall(function()
+				ContentProvider:PreloadAsync({ image })
+			end)
+			updateLoadedState()
+		end)
+		return image
 	end
 	properties.ImageTransparency = nil
 	properties.ImageColor3 = nil

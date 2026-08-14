@@ -34,6 +34,17 @@ the resulting image asset ID, and set `Assets.SpriteSheet`. KittenHub uses
 predefined `ImageRectOffset`/`ImageRectSize` rectangles to render all six
 decorations from that single uploaded image.
 
+### If the sprites appear blank
+
+1. Wait until the image thumbnail is visible and moderation has completed.
+2. In Creator Dashboard, open the image's **Permissions / Asset Access** page.
+3. If testing inside an experience you don't own, set the image to **Open Use**.
+4. Keep the code value in the form `rbxassetid://75770413731434`.
+
+KittenHub preloads the sheet and prints a warning in the Developer Console when
+Roblox denies or fails to load it. A glyph fallback is displayed instead of an
+empty square.
+
 `Example.lua` contains a placeholder URL. Replace `YOUR_RAW_KITTENHUB_URL_HERE` after the library is uploaded to a raw file host or GitHub repository.
 
 ## Example API
