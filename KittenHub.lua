@@ -52,6 +52,10 @@ local Fonts = {
 }
 
 local MAX_NOTIFICATIONS = 5
+-- Seconds an asset may stay unloaded before its glyph placeholder is shown, and
+-- how long the watcher keeps checking whether it eventually arrived.
+local FALLBACK_GLYPH_DELAY = 12
+local FALLBACK_GIVE_UP = 90
 
 local Theme = {
 	Background = Color3.fromRGB(9, 10, 10),
@@ -396,26 +400,47 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		-- still false deadlocked it: invisible, therefore never fetched,
 		-- therefore never loaded. An unloaded label simply draws nothing, so
 		-- toggling the glyph behind it is enough.
-		-- The fallback starts hidden and is only revealed once the fetch has
-		-- settled without producing an image, so a loaded icon never shows a glyph
-		-- stacked on top of it and a pending icon does not flash one.
-		local function updateLoadedState()
-			if not fallback.Parent then
-				return
+		-- Roblox does not download an image for a GUI that never renders, so an icon
+		-- on an unselected tab reports IsLoaded = false long after PreloadAsync has
+		-- returned for it. Revealing the glyph on that signal painted grey specks
+		-- over every tab the user had not opened yet. The glyph is therefore only
+		-- shown once an asset has stayed unloaded well past any normal fetch, and
+		-- is always withdrawn the moment the image does arrive. IsLoaded does not
+		-- dependably raise a changed event either, hence the poll alongside it.
+		local function hideFallbackIfLoaded()
+			if fallback.Parent and image.IsLoaded then
+				fallback.Visible = false
 			end
-			fallback.Visible = not image.IsLoaded
 		end
-		image:GetPropertyChangedSignal("IsLoaded"):Connect(updateLoadedState)
-		queuePreload(image, updateLoadedState)
+		image:GetPropertyChangedSignal("IsLoaded"):Connect(hideFallbackIfLoaded)
+		queuePreload(image, hideFallbackIfLoaded)
 
-		task.delay(10, function()
-			if image.Parent and not image.IsLoaded and not warnedAssets[imageId] then
-				warnedAssets[imageId] = true
-				warn(
-					"[KittenHub] Image asset still not loaded after 10s:",
-					imageId,
-					"Check moderation and Asset Privacy/Open Use permissions."
-				)
+		task.spawn(function()
+			local start = os.clock()
+			while image.Parent do
+				if image.IsLoaded then
+					hideFallbackIfLoaded()
+					return
+				end
+				local elapsed = os.clock() - start
+				if elapsed > FALLBACK_GLYPH_DELAY then
+					if fallback.Parent and not fallback.Visible then
+						fallback.Visible = true
+					end
+					if not warnedAssets[imageId] then
+						warnedAssets[imageId] = true
+						warn(
+							"[KittenHub] Image asset still not loaded after",
+							FALLBACK_GLYPH_DELAY .. "s:",
+							imageId,
+							"Check moderation and Asset Privacy/Open Use permissions."
+						)
+					end
+					if elapsed > FALLBACK_GIVE_UP then
+						return
+					end
+				end
+				task.wait(elapsed > FALLBACK_GLYPH_DELAY and 2 or 0.5)
 			end
 		end)
 		return image
@@ -977,7 +1002,9 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	}) :: Frame
 	dropShadow(content, 26, 0, 0.55, 8)
 	dashedBorder(content, 20)
-	addSoftPattern(content, assets)
+	-- No background pattern on the content panel. A dense page hides it entirely
+	-- while a sparse one (Settings, Players) leaves it stranded in open space, so
+	-- the texture only ever showed up as clutter on the emptier tabs.
 	local contentFooterLine = dashedLine(content, baseSize.Y - 120, 0, 0, 900)
 	spriteOrGlyph(contentFooterLine, {
 		Name = "FooterHeart",
