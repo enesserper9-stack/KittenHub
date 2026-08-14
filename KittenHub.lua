@@ -1147,4 +1147,4 @@ function SectionMethods:AddKeybind(options: any)
 	return registerFlag(self, options.Flag, control)
 end
 
-return setmetatable(KittenHub, KittenHub)
+return KittenHub
