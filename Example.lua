@@ -1,6 +1,6 @@
 -- KittenHub example / visual test
 
-local KittenHub = loadstring(game:HttpGet("YOUR_RAW_KITTENHUB_URL_HERE"))()
+local KittenHub = loadstring(game:HttpGet("https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua"))()
 
 local Window = KittenHub:CreateWindow({
 	Title = "KittenHub",
