@@ -80,6 +80,7 @@ local Window = KittenHub:CreateWindow({
 		Settings = "rbxassetid://87200505076227",
 		Bell = "rbxassetid://80479928306450",
 		Unload = "rbxassetid://93174476369835",
+		ToggleUI = "rbxassetid://94264300792153",
 	},
 })
 
@@ -164,7 +165,7 @@ PlayerSection:AddLabel({
 })
 
 local Interface = Settings:AddSection("Interface")
-Interface:AddLabel({ Text = "Toggle UI: RightShift" })
+Interface:AddLabel({ Text = "Toggle UI: RightShift", IconRole = "ToggleUI" })
 Interface:AddButton({
 	Text = "Unload KittenHub",
 	IconRole = "Unload",

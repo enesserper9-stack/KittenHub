@@ -28,6 +28,7 @@ KittenHub.DefaultAssets = {
 	Settings = "rbxassetid://87200505076227",
 	Bell = "rbxassetid://80479928306450",
 	Unload = "rbxassetid://93174476369835",
+	ToggleUI = "rbxassetid://94264300792153",
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
@@ -318,8 +319,15 @@ local preloadRunning = false
 -- One line per failing asset instead of one per element that references it.
 local warnedAssets: {[string]: boolean} = {}
 
-local function queuePreload(instance: Instance)
+local preloadCallbacks: {() -> ()} = {}
+
+-- PreloadAsync only returns once every asset in the batch has settled, so its
+-- completion is the reliable signal for "this image is done". ImageLabel.IsLoaded
+-- does not dependably raise a property changed event, which left glyph fallbacks
+-- drawn on top of images that had in fact arrived.
+local function queuePreload(instance: Instance, onSettled: () -> ())
 	table.insert(preloadQueue, instance)
+	table.insert(preloadCallbacks, onSettled)
 	if preloadRunning then
 		return
 	end
@@ -327,10 +335,15 @@ local function queuePreload(instance: Instance)
 	task.defer(function()
 		while #preloadQueue > 0 do
 			local batch = preloadQueue
+			local callbacks = preloadCallbacks
 			preloadQueue = {}
+			preloadCallbacks = {}
 			pcall(function()
 				ContentProvider:PreloadAsync(batch)
 			end)
+			for _, callback in ipairs(callbacks) do
+				pcall(callback)
+			end
 		end
 		preloadRunning = false
 	end)
@@ -383,6 +396,9 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		-- still false deadlocked it: invisible, therefore never fetched,
 		-- therefore never loaded. An unloaded label simply draws nothing, so
 		-- toggling the glyph behind it is enough.
+		-- The fallback starts hidden and is only revealed once the fetch has
+		-- settled without producing an image, so a loaded icon never shows a glyph
+		-- stacked on top of it and a pending icon does not flash one.
 		local function updateLoadedState()
 			if not fallback.Parent then
 				return
@@ -390,8 +406,7 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 			fallback.Visible = not image.IsLoaded
 		end
 		image:GetPropertyChangedSignal("IsLoaded"):Connect(updateLoadedState)
-		updateLoadedState()
-		queuePreload(image)
+		queuePreload(image, updateLoadedState)
 
 		task.delay(10, function()
 			if image.Parent and not image.IsLoaded and not warnedAssets[imageId] then
@@ -635,6 +650,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	assets.Settings = assets.Settings or KittenHub.DefaultAssets.Settings
 	assets.Bell = assets.Bell or KittenHub.DefaultAssets.Bell
 	assets.Unload = assets.Unload or KittenHub.DefaultAssets.Unload
+	assets.ToggleUI = assets.ToggleUI or KittenHub.DefaultAssets.ToggleUI
 	assets.RowIcon = assets.RowIcon or assets.Logo
 
 	local existing = getParent():FindFirstChild("KittenHubUI")
