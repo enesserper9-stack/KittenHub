@@ -10,7 +10,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
 KittenHub.__index = KittenHub
-KittenHub.Version = "0.1.0"
+KittenHub.Version = "0.2.0"
 KittenHub.AssetId = "rbxassetid://89700767026016"
 
 local Theme = {
@@ -72,9 +72,9 @@ local function label(properties: {[string]: any}): TextLabel
 	local defaults = {
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Font = Enum.Font.Gotham,
+		Font = Enum.Font.GothamMedium,
 		TextColor3 = Theme.Text,
-		TextSize = 15,
+		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Center,
 	}
@@ -89,10 +89,10 @@ local function button(properties: {[string]: any}, children: {Instance}?): TextB
 		AutoButtonColor = false,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Font = Enum.Font.Gotham,
+		Font = Enum.Font.GothamMedium,
 		Text = "",
 		TextColor3 = Theme.Text,
-		TextSize = 15,
+		TextSize = 16,
 	}
 	for key, value in pairs(properties) do
 		defaults[key] = value
@@ -188,16 +188,16 @@ local function updateResponsiveScale(window: any)
 	local viewport = camera.ViewportSize
 	local usableWidth = math.max(viewport.X - 40, 320)
 	local usableHeight = math.max(viewport.Y - 40, 240)
-	-- 1248x687 is the design canvas, not the final unscaled Roblox footprint.
-	-- A default 0.8 scale keeps the entire window near 1248x687 on 125% DPI displays.
-	local scale = math.min(window._designScale, usableWidth / window._baseSize.X, usableHeight / window._baseSize.Y)
-	window._uiScale.Scale = math.clamp(scale, 0.48, 1)
+	-- Render at 1:1 whenever possible. Scaling text to 0.8 makes Roblox rasterize
+	-- glyphs on fractional pixels, which causes the soft/blurry look.
+	local fitScale = math.min(usableWidth / window._baseSize.X, usableHeight / window._baseSize.Y, 1)
+	window._uiScale.Scale = math.clamp(fitScale * window._designScale, 0.48, 1)
 end
 
 function KittenHub:CreateWindow(options: {[string]: any}?)
 	options = options or {}
 	local baseSize = options.Size or Vector2.new(1248, 687)
-	local designScale = options.Scale or 0.8
+	local designScale = options.Scale or 1
 	local title = options.Title or "KittenHub"
 	local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
 
@@ -224,7 +224,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 		Parent = screenGui,
-	}, { corner(13), stroke(Theme.Border) }) :: Frame
+	}, { corner(17), stroke(Theme.Border) }) :: Frame
 
 	local uiScale = create("UIScale", { Scale = 1, Parent = root }) :: UIScale
 
@@ -269,7 +269,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Size = UDim2.new(1, -68, 1, 0),
 		Font = Enum.Font.GothamBold,
 		Text = title,
-		TextSize = 22,
+		TextSize = 23,
 		Parent = brand,
 	})
 
@@ -344,7 +344,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Size = UDim2.new(1, -34, 0, 56),
 		Font = Enum.Font.GothamBold,
 		Text = options.PageTitle or "Home",
-		TextSize = 27,
+		TextSize = 28,
 		Parent = sidebar,
 	})
 	local _sidebarHeader = sidebarHeader
@@ -370,7 +370,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		BackgroundColor3 = Theme.Surface,
 		BorderSizePixel = 0,
 		Parent = sidebar,
-	}, { corner(12) }) :: Frame
+	}, { corner(15) }) :: Frame
 
 	create("ImageLabel", {
 		Name = "Avatar",
@@ -388,7 +388,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Size = UDim2.new(1, -84, 0, 24),
 		Font = Enum.Font.GothamBold,
 		Text = options.UserName or (LocalPlayer and LocalPlayer.DisplayName) or "Player",
-		TextSize = 14,
+		TextSize = 15,
 		Parent = footer,
 	})
 	label({
@@ -396,7 +396,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Size = UDim2.new(1, -84, 0, 20),
 		Text = options.UserStatus or "Signed in",
 		TextColor3 = Theme.MutedText,
-		TextSize = 12,
+		TextSize = 13,
 		Parent = footer,
 	})
 	label({
@@ -533,12 +533,12 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		BackgroundTransparency = 0.03,
 		BorderSizePixel = 0,
 		Parent = holder,
-	}, { corner(11), stroke(Theme.Border), padding(13, 15, 13, 15) }) :: Frame
+	}, { corner(14), stroke(Theme.Border), padding(13, 15, 13, 15) }) :: Frame
 	label({
 		Size = UDim2.new(1, 0, 0, 24),
 		Font = Enum.Font.GothamBold,
 		Text = options.Title or "KittenHub",
-		TextSize = 15,
+		TextSize = 16,
 		Parent = notification,
 	})
 	label({
@@ -546,7 +546,7 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		Size = UDim2.new(1, 0, 0, 34),
 		Text = options.Content or "Notification",
 		TextColor3 = Theme.MutedText,
-		TextSize = 13,
+		TextSize = 14,
 		TextWrapped = true,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Parent = notification,
@@ -579,7 +579,7 @@ function WindowMethods:AddTab(options: any)
 		Text = "",
 		LayoutOrder = order,
 		Parent = self.TabList,
-	}, { corner(11) })
+	}, { corner(13) })
 
 	label({
 		Name = "Icon",
@@ -598,7 +598,7 @@ function WindowMethods:AddTab(options: any)
 		Font = Enum.Font.GothamSemibold,
 		Text = tabName,
 		TextColor3 = Theme.Text,
-		TextSize = 15,
+		TextSize = 16,
 		Parent = tabButton,
 	})
 
@@ -621,7 +621,7 @@ function WindowMethods:AddTab(options: any)
 		Size = UDim2.new(1, 0, 0, 40),
 		Font = Enum.Font.GothamBold,
 		Text = tabName,
-		TextSize = 24,
+		TextSize = 25,
 		LayoutOrder = 0,
 		Parent = page,
 	})
@@ -712,7 +712,7 @@ function TabMethods:AddSection(options: any)
 		Font = Enum.Font.GothamSemibold,
 		Text = name,
 		TextColor3 = Theme.MutedText,
-		TextSize = 13,
+		TextSize = 14,
 		Parent = wrapper,
 	})
 
@@ -724,7 +724,7 @@ function TabMethods:AddSection(options: any)
 		BackgroundColor3 = Theme.Surface,
 		BorderSizePixel = 0,
 		Parent = wrapper,
-	}, { corner(12), stroke(Theme.Border, 0.45), padding(4, 14, 4, 14), listLayout(0) }) :: Frame
+	}, { corner(16), stroke(Theme.Border, 0.45), padding(4, 14, 4, 14), listLayout(0) }) :: Frame
 
 	local section = setmetatable({
 		Tab = self,
@@ -764,7 +764,7 @@ local function controlRow(section: any, height: number, title: string, descripti
 		Size = UDim2.new(0.62, -6, 0, description and 28 or height),
 		Font = Enum.Font.GothamSemibold,
 		Text = title,
-		TextSize = 14,
+		TextSize = 15,
 		Parent = row,
 	})
 	if description then
@@ -774,7 +774,7 @@ local function controlRow(section: any, height: number, title: string, descripti
 			Size = UDim2.new(0.75, -6, 0, 23),
 			Text = description,
 			TextColor3 = Theme.MutedText,
-			TextSize = 12,
+			TextSize = 13,
 			Parent = row,
 		})
 	end
@@ -820,9 +820,9 @@ function SectionMethods:AddButton(options: any)
 		BackgroundTransparency = 0,
 		Text = options.ButtonText or "Run",
 		TextColor3 = Theme.Text,
-		TextSize = 13,
+		TextSize = 14,
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border) })
+	}, { corner(10), stroke(Theme.Border) })
 	table.insert(self.Window._connections, action.MouseEnter:Connect(function()
 		tween(action, 0.15, { BackgroundColor3 = Theme.SurfaceHover })
 	end))
@@ -895,7 +895,7 @@ function SectionMethods:AddSlider(options: any)
 		Size = UDim2.fromOffset(100, 28),
 		Text = "",
 		TextColor3 = Theme.Text,
-		TextSize = 13,
+		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = row,
 	})
@@ -976,12 +976,12 @@ function SectionMethods:AddDropdown(options: any)
 		BackgroundTransparency = 0,
 		Text = "",
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border) })
+	}, { corner(10), stroke(Theme.Border) })
 	local valueText = label({
 		Position = UDim2.fromOffset(12, 0),
 		Size = UDim2.new(1, -42, 1, 0),
 		Text = "Select",
-		TextSize = 13,
+		TextSize = 14,
 		Parent = dropdown,
 	})
 	label({
@@ -1004,7 +1004,7 @@ function SectionMethods:AddDropdown(options: any)
 		Visible = false,
 		ZIndex = 20,
 		Parent = dropdown,
-	}, { corner(8), stroke(Theme.Border), padding(5, 5, 5, 5), listLayout(3) }) :: Frame
+	}, { corner(10), stroke(Theme.Border), padding(5, 5, 5, 5), listLayout(3) }) :: Frame
 	local control = { Type = "Dropdown", Value = options.Default or values[1], Values = values, Instance = row }
 	function control:Set(value: any, silent: boolean?)
 		if not table.find(self.Values, value) then
@@ -1040,7 +1040,7 @@ function SectionMethods:AddDropdown(options: any)
 				BackgroundTransparency = 1,
 				Text = tostring(value),
 				TextColor3 = Theme.Text,
-				TextSize = 13,
+				TextSize = 14,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				LayoutOrder = index,
 				ZIndex = 21,
@@ -1073,15 +1073,15 @@ function SectionMethods:AddTextbox(options: any)
 		BackgroundColor3 = Theme.Selected,
 		BorderSizePixel = 0,
 		ClearTextOnFocus = false,
-		Font = Enum.Font.Gotham,
+		Font = Enum.Font.GothamMedium,
 		PlaceholderText = options.Placeholder or "Type here...",
 		PlaceholderColor3 = Theme.FaintText,
 		Text = options.Default or "",
 		TextColor3 = Theme.Text,
-		TextSize = 13,
+		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border), padding(0, 11, 0, 11) }) :: TextBox
+	}, { corner(10), stroke(Theme.Border), padding(0, 11, 0, 11) }) :: TextBox
 	local control = { Type = "Textbox", Value = textbox.Text, Instance = row }
 	function control:Set(value: string, silent: boolean?)
 		self.Value = tostring(value)
@@ -1111,11 +1111,11 @@ function SectionMethods:AddKeybind(options: any)
 		BackgroundTransparency = 0,
 		Text = "",
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border) })
+	}, { corner(10), stroke(Theme.Border) })
 	local keyLabel = label({
 		Size = UDim2.fromScale(1, 1),
 		Text = "",
-		TextSize = 12,
+		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = keyButton,
 	})
