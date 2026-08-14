@@ -23,6 +23,24 @@ interface text, and Builder Mono for values, text inputs, and keybinds.
 - Dashed dividers derive their dash count from the real rendered width.
 - Fonts fall back to Source Sans Pro / Roboto Mono if a family is unavailable.
 
+`0.5.5` adopts engine features that shipped after the original layout was
+written, and reworks the window chrome:
+
+- Every `UIStroke` sets `BorderStrokePosition = Inner` (released 2025-12-04).
+  The default `Outer` drew each hairline outside the rounded shape, which read as
+  a drawn outline rather than an inset edge.
+- Panels, cards, and buttons carry a `UIGradient` inside their `UIStroke`, so the
+  border catches light along its top edge and fades out at the bottom.
+- The fake shadow frame is replaced by native `UIShadow` (released 2026-06-23),
+  with the old frame kept as a fallback for clients that lack the class.
+- Border colour moved from a solid mid grey to a light tint at high transparency,
+  and every gradient ramp was flattened.
+- Window controls are drawn from primitives instead of `—`, `□` and `×` glyphs,
+  which never shared a baseline. Each is a 34px hit target with a hover plate;
+  close tints red.
+- Minimizing hides everything below the top bar instead of clipping it.
+- New `Unload` asset role, used as the row icon for the unload button.
+
 ## Current preview
 
 - Design canvas: `1280 x 760`

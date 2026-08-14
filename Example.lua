@@ -16,7 +16,10 @@ end
 -- ?v=... are not a reliable cache key). A commit URL is immutable, so resolving
 -- the branch head first guarantees the newest file.
 local function resolveLibraryUrl(): (string, string)
-	local body = httpGet("https://api.github.com/repos/" .. REPO .. "/commits/" .. BRANCH)
+	-- The API URL needs its own cache buster: it is otherwise identical on every
+	-- run, so the client serves the first response back and the resolver keeps
+	-- pinning to a stale commit. GitHub ignores unknown query parameters.
+	local body = httpGet("https://api.github.com/repos/" .. REPO .. "/commits/" .. BRANCH .. "?_=" .. tostring(os.time()))
 	local commit = body and string.match(body, '"sha"%s*:%s*"(%x+)"') or nil
 	if commit then
 		return "https://raw.githubusercontent.com/" .. REPO .. "/" .. commit .. "/KittenHub.lua", commit
@@ -76,6 +79,7 @@ local Window = KittenHub:CreateWindow({
 		Players = "rbxassetid://125376145853165",
 		Settings = "rbxassetid://87200505076227",
 		Bell = "rbxassetid://80479928306450",
+		Unload = "rbxassetid://93174476369835",
 	},
 })
 
@@ -163,6 +167,7 @@ local Interface = Settings:AddSection("Interface")
 Interface:AddLabel({ Text = "Toggle UI: RightShift" })
 Interface:AddButton({
 	Text = "Unload KittenHub",
+	IconRole = "Unload",
 	ButtonText = "Unload",
 	Callback = function()
 		Window:Destroy()

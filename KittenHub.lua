@@ -27,6 +27,7 @@ KittenHub.DefaultAssets = {
 	Players = "rbxassetid://125376145853165",
 	Settings = "rbxassetid://87200505076227",
 	Bell = "rbxassetid://80479928306450",
+	Unload = "rbxassetid://93174476369835",
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
@@ -600,6 +601,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	assets.Players = assets.Players or KittenHub.DefaultAssets.Players
 	assets.Settings = assets.Settings or KittenHub.DefaultAssets.Settings
 	assets.Bell = assets.Bell or KittenHub.DefaultAssets.Bell
+	assets.Unload = assets.Unload or KittenHub.DefaultAssets.Unload
 	assets.RowIcon = assets.RowIcon or assets.Logo
 
 	local existing = getParent():FindFirstChild("KittenHubUI")
