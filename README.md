@@ -39,7 +39,8 @@ decorations from that single uploaded image.
 1. Wait until the image thumbnail is visible and moderation has completed.
 2. In Creator Dashboard, open the image's **Permissions / Asset Access** page.
 3. If testing inside an experience you don't own, set the image to **Open Use**.
-4. Keep the code value in the form `rbxassetid://75770413731434`.
+4. Use the image dependency/texture ID, not the parent asset/decal ID. For this
+   sheet the correct value is `rbxassetid://73389330357206`.
 
 KittenHub preloads the sheet and prints a warning in the Developer Console when
 Roblox denies or fails to load it. A glyph fallback is displayed instead of an
@@ -56,7 +57,7 @@ local Window = KittenHub:CreateWindow({
     Size = Vector2.new(1280, 760),
     Scale = 0.78,
     Assets = {
-		SpriteSheet = "rbxassetid://75770413731434",
+		SpriteSheet = "rbxassetid://73389330357206",
         Logo = "rbxassetid://89700767026016",
         RowIcon = "rbxassetid://89700767026016",
         -- Paw = "rbxassetid://YOUR_PAW_ASSET",

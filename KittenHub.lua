@@ -13,7 +13,7 @@ local KittenHub = {}
 KittenHub.__index = KittenHub
 KittenHub.Version = "0.2.0"
 KittenHub.AssetId = "rbxassetid://89700767026016"
-KittenHub.SpriteSheetId = "rbxassetid://75770413731434"
+KittenHub.SpriteSheetId = "rbxassetid://73389330357206"
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
 -- Fredoka One, Builder Sans, and Builder Mono provide a native visual equivalent.
