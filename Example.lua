@@ -1,6 +1,9 @@
 -- KittenHub example / visual test
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=12"
+-- A fixed ?v= value keeps raw.githubusercontent serving that exact URL from its
+-- CDN cache, so a fresh push can still load as the previous revision. The
+-- timestamp makes every run a cache miss.
+local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=" .. tostring(os.time())
 local source = game:HttpGet(LIBRARY_URL, true)
 local loader, compileError = loadstring(source)
 
