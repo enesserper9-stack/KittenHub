@@ -315,6 +315,8 @@ end
 -- created in the same frame is fetched as a single batched request instead.
 local preloadQueue: {Instance} = {}
 local preloadRunning = false
+-- One line per failing asset instead of one per element that references it.
+local warnedAssets: {[string]: boolean} = {}
 
 local function queuePreload(instance: Instance)
 	table.insert(preloadQueue, instance)
@@ -376,24 +378,24 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		local image = create("ImageLabel", properties) :: ImageLabel
 		local fallback = create("TextLabel", fallbackProperties) :: TextLabel
 
-		-- Driven purely by IsLoaded and evaluated up front. The previous version
-		-- only ran this after PreloadAsync returned, so while that call was
-		-- throttled the image stayed visible-but-empty and the glyph stayed
-		-- hidden, leaving a blank tile with no fallback.
+		-- The ImageLabel is never hidden. Roblox only downloads an image once the
+		-- label actually renders, so setting Visible = false while IsLoaded was
+		-- still false deadlocked it: invisible, therefore never fetched,
+		-- therefore never loaded. An unloaded label simply draws nothing, so
+		-- toggling the glyph behind it is enough.
 		local function updateLoadedState()
-			if not image.Parent or not fallback.Parent then
+			if not fallback.Parent then
 				return
 			end
-			local loaded = image.IsLoaded
-			image.Visible = loaded
-			fallback.Visible = not loaded
+			fallback.Visible = not image.IsLoaded
 		end
 		image:GetPropertyChangedSignal("IsLoaded"):Connect(updateLoadedState)
 		updateLoadedState()
 		queuePreload(image)
 
 		task.delay(10, function()
-			if image.Parent and not image.IsLoaded then
+			if image.Parent and not image.IsLoaded and not warnedAssets[imageId] then
+				warnedAssets[imageId] = true
 				warn(
 					"[KittenHub] Image asset still not loaded after 10s:",
 					imageId,
