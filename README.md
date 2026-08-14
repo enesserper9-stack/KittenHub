@@ -4,11 +4,13 @@ KittenHub is an early-stage monochrome Roblox UI library inspired by the visual 
 
 ## Current preview
 
-- Base window: `1248 x 687`
+- Design canvas: `1248 x 687`
+- Default rendered scale: `0.8` so the full window, including the sidebar, matches the intended footprint
 - Sidebar: `252 px`
 - Sidebar controls: about `221 px`
 - Responsive `UIScale` for smaller viewports
 - Asset: `rbxassetid://89700767026016`
+- Clean top bar without decorative navigation icons
 - Window dragging, minimize, recenter, close, and RightShift visibility toggle
 - Tabs and sections
 - Label, button, toggle, slider, dropdown, textbox, and keybind controls
