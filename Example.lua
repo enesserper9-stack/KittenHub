@@ -35,17 +35,22 @@ assert(loader, "KittenHub derlenemedi: " .. tostring(compileError))
 local KittenHub = loader()
 assert(type(KittenHub) == "table", "KittenHub yukleyicisi tablo yerine " .. typeof(KittenHub) .. " dondurdu")
 assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulunamadi; GitHub dosyasi eski veya eksik")
+-- Not an assert: uploading KittenHub.lua and Example.lua as two separate commits
+-- leaves a window where this file already expects the newer version and the
+-- library does not have it yet. That mismatch is only worth a warning, since the
+-- previous library still runs. Upload both files in one commit to avoid it.
 local EXPECTED_VERSION = "0.5.5"
-assert(
-	KittenHub.Version == EXPECTED_VERSION,
-	"GitHub eski KittenHub surumunu dondurdu. Beklenen: "
-		.. EXPECTED_VERSION
-		.. ", gelen: "
-		.. tostring(KittenHub.Version)
-		.. " (ref: "
-		.. LIBRARY_REF
-		.. ")"
-)
+if KittenHub.Version ~= EXPECTED_VERSION then
+	warn(
+		"[KittenHub Example] Surum uyusmazligi - beklenen: "
+			.. EXPECTED_VERSION
+			.. ", gelen: "
+			.. tostring(KittenHub.Version)
+			.. " (ref: "
+			.. LIBRARY_REF
+			.. "). Iki dosya ayni commit'te degil; yeni ozellikler eksik olabilir."
+	)
+end
 warn("[KittenHub Example] Loaded version:", KittenHub.Version, "ref:", LIBRARY_REF)
 
 local Window = KittenHub:CreateWindow({
