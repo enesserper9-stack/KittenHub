@@ -9,7 +9,11 @@ assert(loader, "KittenHub derlenemedi: " .. tostring(compileError))
 local KittenHub = loader()
 assert(type(KittenHub) == "table", "KittenHub yukleyicisi tablo yerine " .. typeof(KittenHub) .. " dondurdu")
 assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulunamadi; GitHub dosyasi eski veya eksik")
-assert(KittenHub.Version == "0.5.3", "GitHub eski KittenHub surumunu dondurdu. Beklenen: 0.5.3, gelen: " .. tostring(KittenHub.Version))
+local EXPECTED_VERSION = "0.5.4"
+assert(
+	KittenHub.Version == EXPECTED_VERSION,
+	"GitHub eski KittenHub surumunu dondurdu. Beklenen: " .. EXPECTED_VERSION .. ", gelen: " .. tostring(KittenHub.Version)
+)
 warn("[KittenHub Example] Loaded version:", KittenHub.Version)
 
 local Window = KittenHub:CreateWindow({

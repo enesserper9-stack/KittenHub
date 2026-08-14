@@ -6,6 +6,23 @@ The `0.5.3` visual refresh converts the Project Real / KittenHub reference into
 Roblox-native UI: Fredoka One for playful display headings, Builder Sans for
 interface text, and Builder Mono for values, text inputs, and keybinds.
 
+`0.5.4` is a correctness pass over that layout:
+
+- Dropdown lists moved to an unclipped overlay layer, so they are no longer cut
+  off by the content panel; they follow the button while scrolling, flip upward
+  near the bottom edge, and close on outside click, tab switch, or resize.
+- Sidebar, content, and footer panels use dashed outlines to match the reference.
+- Section cards get explicit `LayoutOrder` values instead of relying on
+  undefined tie-breaking between rows and dividers.
+- Every window now owns three `UserInputService` connections total; sliders,
+  keybinds, and dragging share them instead of adding their own.
+- Touch input works for window dragging and sliders.
+- Keybind capture ignores game-processed input (typing in a textbox no longer
+  rebinds), `Escape` cancels, and `Backspace` / `Delete` clears the bind.
+- Notifications no longer leak a connection per toast and cap at five on screen.
+- Dashed dividers derive their dash count from the real rendered width.
+- Fonts fall back to Source Sans Pro / Roboto Mono if a family is unavailable.
+
 ## Current preview
 
 - Design canvas: `1280 x 760`

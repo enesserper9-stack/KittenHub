@@ -10,8 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.__index = KittenHub
-KittenHub.Version = "0.5.3"
+KittenHub.Version = "0.5.4"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -32,14 +31,25 @@ KittenHub.DefaultAssets = {
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
 -- Fredoka One, Builder Sans, and Builder Mono provide a native visual equivalent.
+local function font(family: string, weight: Enum.FontWeight, fallback: string): Font
+	local ok, value = pcall(Font.new, "rbxasset://fonts/families/" .. family .. ".json", weight)
+	if ok and value then
+		return value
+	end
+	warn("[KittenHub] Font family unavailable:", family, "- falling back to", fallback)
+	return Font.new("rbxasset://fonts/families/" .. fallback .. ".json", weight)
+end
+
 local Fonts = {
-	Display = Font.new("rbxasset://fonts/families/FredokaOne.json", Enum.FontWeight.Regular),
-	Body = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Regular),
-	Medium = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium),
-	Semibold = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.SemiBold),
-	Bold = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Bold),
-	Mono = Font.new("rbxasset://fonts/families/BuilderMono.json", Enum.FontWeight.Regular),
+	Display = font("FredokaOne", Enum.FontWeight.Regular, "SourceSansPro"),
+	Body = font("BuilderSans", Enum.FontWeight.Regular, "SourceSansPro"),
+	Medium = font("BuilderSans", Enum.FontWeight.Medium, "SourceSansPro"),
+	Semibold = font("BuilderSans", Enum.FontWeight.SemiBold, "SourceSansPro"),
+	Bold = font("BuilderSans", Enum.FontWeight.Bold, "SourceSansPro"),
+	Mono = font("BuilderMono", Enum.FontWeight.Regular, "RobotoMono"),
 }
+
+local MAX_NOTIFICATIONS = 5
 
 local Theme = {
 	Background = Color3.fromRGB(9, 10, 10),
@@ -60,13 +70,24 @@ local Theme = {
 	Fonts = Fonts,
 }
 
+-- Parent is applied last so an instance is never shown with half of its
+-- properties assigned (pairs() order is undefined), which caused a one frame
+-- flicker and an extra layout pass for every created object.
 local function create(className: string, properties: {[string]: any}?, children: {Instance}?): Instance
 	local object = Instance.new(className)
+	local parent: Instance? = nil
 	for property, value in pairs(properties or {}) do
-		(object :: any)[property] = value
+		if property == "Parent" then
+			parent = value
+		else
+			(object :: any)[property] = value
+		end
 	end
 	for _, child in ipairs(children or {}) do
 		child.Parent = object
+	end
+	if parent then
+		object.Parent = parent
 	end
 	return object
 end
@@ -111,7 +132,7 @@ local function gradient(topColor: Color3, bottomColor: Color3, rotation: number?
 	}) :: UIGradient
 end
 
-local function dashedLine(parent: Instance, y: number, left: number, right: number, width: number)
+local function dashedLine(parent: Instance, y: number, left: number, right: number, fallbackWidth: number)
 	local holder = create("Frame", {
 		Name = "DashedDivider",
 		Position = UDim2.new(0, left, 0, y),
@@ -120,21 +141,115 @@ local function dashedLine(parent: Instance, y: number, left: number, right: numb
 		LayoutOrder = 1,
 		Parent = parent,
 	}) :: Frame
-	local count = math.max(1, math.floor(width / 18))
-	for index = 0, count - 1 do
+
+	-- Dash count follows the real rendered width instead of a hardcoded 900px,
+	-- and is only rebuilt when the count actually changes.
+	local currentCount = -1
+	local function rebuild()
+		local width = holder.AbsoluteSize.X
+		if width <= 0 then
+			width = fallbackWidth
+		end
+		local count = math.max(1, math.floor(width / 18))
+		if count == currentCount then
+			return
+		end
+		currentCount = count
+		for _, child in ipairs(holder:GetChildren()) do
+			if child.Name == "Dash" then
+				child:Destroy()
+			end
+		end
+		for index = 0, count - 1 do
+			create("Frame", {
+				Name = "Dash",
+				Position = UDim2.new(index / count, 0, 0, 0),
+				Size = UDim2.fromOffset(9, 1),
+				BackgroundColor3 = Theme.FaintText,
+				BackgroundTransparency = 0.38,
+				BorderSizePixel = 0,
+				Parent = holder,
+			})
+		end
+	end
+
+	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(rebuild)
+	rebuild()
+	return holder
+end
+
+-- Roblox has no dashed UIStroke, so the panel outlines from the reference are
+-- drawn as individual dash segments along each edge, skipping the rounded
+-- corners. Segments are rebuilt only when the panel size actually changes.
+local function dashedBorder(frame: GuiObject, radius: number, transparency: number?, color: Color3?)
+	local holder = create("Frame", {
+		Name = "DashedBorder",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+		Parent = frame,
+	}) :: Frame
+
+	local dashLength, gap, thickness = 7, 6, 1
+	local dashColor = color or Theme.Border
+	local alpha = transparency or 0.35
+	local lastWidth, lastHeight = -1, -1
+
+	local function dash(position: UDim2, size: UDim2)
 		create("Frame", {
-			Position = UDim2.new(index / count, 0, 0, 0),
-			Size = UDim2.fromOffset(9, 1),
-			BackgroundColor3 = Theme.FaintText,
-			BackgroundTransparency = 0.38,
+			Name = "Dash",
+			Position = position,
+			Size = size,
+			BackgroundColor3 = dashColor,
+			BackgroundTransparency = alpha,
 			BorderSizePixel = 0,
 			Parent = holder,
 		})
 	end
+
+	local function rebuild()
+		local size = holder.AbsoluteSize
+		local width, height = math.floor(size.X), math.floor(size.Y)
+		if width <= 0 or height <= 0 or (width == lastWidth and height == lastHeight) then
+			return
+		end
+		lastWidth, lastHeight = width, height
+		holder:ClearAllChildren()
+
+		local step = dashLength + gap
+		local horizontalSpan = math.max(width - (radius * 2), 0)
+		local verticalSpan = math.max(height - (radius * 2), 0)
+		local horizontalCount = math.max(1, math.floor((horizontalSpan + gap) / step))
+		local verticalCount = math.max(1, math.floor((verticalSpan + gap) / step))
+		local horizontalPad = (horizontalSpan - ((horizontalCount * step) - gap)) / 2
+		local verticalPad = (verticalSpan - ((verticalCount * step) - gap)) / 2
+
+		for index = 0, horizontalCount - 1 do
+			local x = radius + horizontalPad + (index * step)
+			dash(UDim2.fromOffset(x, 0), UDim2.fromOffset(dashLength, thickness))
+			dash(UDim2.new(0, x, 1, -thickness), UDim2.fromOffset(dashLength, thickness))
+		end
+		for index = 0, verticalCount - 1 do
+			local y = radius + verticalPad + (index * step)
+			dash(UDim2.fromOffset(0, y), UDim2.fromOffset(thickness, dashLength))
+			dash(UDim2.new(1, -thickness, 0, y), UDim2.fromOffset(thickness, dashLength))
+		end
+	end
+
+	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(rebuild)
+	task.defer(rebuild)
 	return holder
 end
 
-local function imageOrGlyph(parent: Instance, properties: {[string]: any}, imageId: string?, glyph: string): GuiObject
+local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any}, imageId: string?, glyph: string): GuiObject
+	-- Work on a copy: the branches below strip keys, and mutating the caller's
+	-- table breaks any table that is reused for a second element.
+	local properties: {[string]: any} = {}
+	for key, value in pairs(sourceProperties) do
+		properties[key] = value
+	end
+
 	if imageId and imageId ~= "" then
 		local fallbackProperties = {
 			Name = (properties.Name or "Image") .. "Fallback",
@@ -295,6 +410,28 @@ local function getParent(): Instance
 	return game:GetService("CoreGui")
 end
 
+local function isPressInput(input: InputObject): boolean
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function isMoveInput(input: InputObject): boolean
+	return input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+-- Every control used to open its own global UserInputService connection, so a
+-- window with ten sliders ran ten callbacks per mouse move. Each window now owns
+-- exactly three connections and fans them out to the registered handlers.
+local function fireInputHandlers(handlers: {(InputObject, boolean) -> ()}, input: InputObject, processed: boolean)
+	for _, handler in ipairs(handlers) do
+		local ok, message = pcall(handler, input, processed)
+		if not ok then
+			warn("[KittenHub] Input handler error:", message)
+		end
+	end
+end
+
 local function disconnectAll(connections: {RBXScriptConnection})
 	for _, connection in ipairs(connections) do
 		if connection.Connected then
@@ -320,7 +457,7 @@ local function makeDraggable(window: any, handle: GuiObject, target: GuiObject)
 	local shadowStart = window._shadow and window._shadow.Position or nil
 
 	table.insert(window._connections, handle.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if isPressInput(input) then
 			dragging = true
 			dragStart = input.Position
 			startPosition = target.Position
@@ -328,14 +465,14 @@ local function makeDraggable(window: any, handle: GuiObject, target: GuiObject)
 		end
 	end))
 
-	table.insert(window._connections, UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	table.insert(window._inputEnded, function(input)
+		if isPressInput(input) then
 			dragging = false
 		end
-	end))
+	end)
 
-	table.insert(window._connections, UserInputService.InputChanged:Connect(function(input)
-		if not dragging or input.UserInputType ~= Enum.UserInputType.MouseMovement then
+	table.insert(window._inputChanged, function(input)
+		if not dragging or not isMoveInput(input) then
 			return
 		end
 		local delta = input.Position - dragStart
@@ -353,7 +490,7 @@ local function makeDraggable(window: any, handle: GuiObject, target: GuiObject)
 				shadowStart.Y.Offset + delta.Y
 			)
 		end
-	end))
+	end)
 end
 
 local function updateResponsiveScale(window: any)
@@ -370,6 +507,9 @@ local function updateResponsiveScale(window: any)
 	if window._shadow then
 		window._shadow.Size = UDim2.fromOffset((window._baseSize.X + 18) * scale, (window._baseSize.Y + 18) * scale)
 	end
+	-- Overlay popups are positioned in absolute screen space, so a resize
+	-- invalidates them.
+	window:ClosePopups()
 end
 
 function KittenHub:CreateWindow(options: {[string]: any}?)
@@ -508,14 +648,13 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = topbar,
 	}) :: Frame
 
-	local controlsLayout = create("UIListLayout", {
+	create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
 		HorizontalAlignment = Enum.HorizontalAlignment.Right,
 		VerticalAlignment = Enum.VerticalAlignment.Center,
 		Padding = UDim.new(0, 2),
 		Parent = windowControls,
-	}) :: UIListLayout
-	local _controlsLayout = controlsLayout
+	})
 
 	local minimize = button({
 		Name = "Minimize",
@@ -554,9 +693,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = root,
 	}, {
 		corner(20),
-		stroke(Theme.Border, 0.05),
+		stroke(Theme.Border, 0.72),
 		gradient(Color3.fromRGB(27, 27, 29), Color3.fromRGB(13, 14, 15), 110),
 	}) :: Frame
+	dashedBorder(sidebar, 20)
 	addSoftPattern(sidebar, assets)
 	spriteOrGlyph(root, {
 		Name = "SidebarPeek",
@@ -600,7 +740,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		BackgroundColor3 = Theme.SurfaceHover,
 		BorderSizePixel = 0,
 		Parent = sidebar,
-	}, { corner(17), stroke(Theme.Border, 0.12) }) :: Frame
+	}, { corner(17), stroke(Theme.Border, 0.78) }) :: Frame
+	dashedBorder(footer, 17)
 
 	spriteOrGlyph(footer, {
 		Name = "Avatar",
@@ -650,11 +791,22 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = root,
 	}, {
 		corner(20),
-		stroke(Theme.Border, 0.05),
+		stroke(Theme.Border, 0.72),
 		gradient(Color3.fromRGB(27, 28, 29), Color3.fromRGB(11, 12, 12), 105),
 	}) :: Frame
+	dashedBorder(content, 20)
 	addSoftPattern(content, assets)
-	dashedLine(content, baseSize.Y - 120, 0, 0, 900)
+	local contentFooterLine = dashedLine(content, baseSize.Y - 120, 0, 0, 900)
+	spriteOrGlyph(contentFooterLine, {
+		Name = "FooterHeart",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(26, 24),
+		ImageTransparency = 0.25,
+		TextTransparency = 0.25,
+		TextSize = 16,
+		ZIndex = 3,
+	}, assets, "Heart", "♥")
 	spriteOrGlyph(root, {
 		Name = "BottomPaw",
 		AnchorPoint = Vector2.new(1, 1),
@@ -686,9 +838,22 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = content,
 	}) :: Frame
 
+	-- Popups live outside the window frame: Content and every page ScrollingFrame
+	-- clip their descendants, so a dropdown list parented to its own row was cut
+	-- off. The overlay sits directly under the ScreenGui and is unclipped.
+	local overlay = create("Frame", {
+		Name = "Overlay",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 40,
+		Parent = screenGui,
+	}) :: Frame
+
 	local window = setmetatable({
 		Gui = screenGui,
 		Root = root,
+		Overlay = overlay,
 		_shadow = shadow,
 		Sidebar = sidebar,
 		TabList = tabList,
@@ -698,6 +863,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Tabs = {},
 		Flags = {},
 		_connections = {},
+		_inputBegan = {},
+		_inputChanged = {},
+		_inputEnded = {},
+		_popups = {},
 		_baseSize = baseSize,
 		_designScale = math.clamp(designScale, 0.48, 1),
 		_uiScale = uiScale,
@@ -706,6 +875,19 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		_minimized = false,
 		_destroyed = false,
 	}, WindowMethods)
+
+	table.insert(window._connections, UserInputService.InputBegan:Connect(function(input, processed)
+		if not processed and input.KeyCode == toggleKey then
+			window:Toggle()
+		end
+		fireInputHandlers(window._inputBegan, input, processed)
+	end))
+	table.insert(window._connections, UserInputService.InputChanged:Connect(function(input, processed)
+		fireInputHandlers(window._inputChanged, input, processed)
+	end))
+	table.insert(window._connections, UserInputService.InputEnded:Connect(function(input, processed)
+		fireInputHandlers(window._inputEnded, input, processed)
+	end))
 
 	makeDraggable(window, topbar, root)
 	updateResponsiveScale(window)
@@ -716,13 +898,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		end))
 	end
 
-	table.insert(window._connections, UserInputService.InputBegan:Connect(function(input, processed)
-		if not processed and input.KeyCode == toggleKey then
-			window:Toggle()
-		end
-	end))
-
 	table.insert(window._connections, minimize.MouseButton1Click:Connect(function()
+		window:ClosePopups()
 		window._minimized = not window._minimized
 		if window._minimized then
 			tween(root, 0.25, { Size = UDim2.fromOffset(baseSize.X, 76) })
@@ -764,7 +941,20 @@ function WindowMethods:Toggle(force: boolean?)
 	else
 		self._visible = force
 	end
+	if not self._visible then
+		self:ClosePopups()
+	end
 	self.Gui.Enabled = self._visible
+end
+
+-- Closes every overlay popup (currently dropdown lists). `except` stays open so
+-- opening one dropdown can close the others in a single call.
+function WindowMethods:ClosePopups(except: any?)
+	for _, popup in ipairs(self._popups) do
+		if popup ~= except then
+			popup.Close()
+		end
+	end
 end
 
 function WindowMethods:Notify(options: {[string]: any}?)
@@ -772,18 +962,17 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		return
 	end
 	options = options or {}
-	local previousOverlay = self.Gui:FindFirstChild("NotificationOverlay")
-	if previousOverlay then
-		previousOverlay:Destroy()
-	end
 
 	local holder = self.Gui:FindFirstChild("Notifications") :: Frame?
 	if not holder then
+		-- AutomaticSize instead of a fixed 400px column: the old holder let the
+		-- fifth notification render past the top of its own frame.
 		holder = create("Frame", {
 			Name = "Notifications",
 			AnchorPoint = Vector2.new(1, 1),
 			Position = UDim2.new(1, -22, 1, -22),
-			Size = UDim2.fromOffset(330, 400),
+			Size = UDim2.fromOffset(330, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ZIndex = 50,
@@ -795,6 +984,16 @@ function WindowMethods:Notify(options: {[string]: any}?)
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}) :: UIListLayout,
 		}) :: Frame
+	end
+
+	local liveSlots = {}
+	for _, child in ipairs((holder :: Frame):GetChildren()) do
+		if child:IsA("Frame") then
+			table.insert(liveSlots, child)
+		end
+	end
+	for index = 1, #liveSlots - (MAX_NOTIFICATIONS - 1) do
+		liveSlots[index]:Destroy()
 	end
 
 	local slot = create("Frame", {
@@ -898,11 +1097,18 @@ function WindowMethods:Notify(options: {[string]: any}?)
 	})
 
 	local closing = false
+	-- The dismiss connection is owned by the slot, not by the window: pushing it
+	-- into _connections leaked one dead entry per notification.
+	local dismissConnection: RBXScriptConnection? = nil
 	local function dismiss()
 		if closing or not slot.Parent then
 			return
 		end
 		closing = true
+		if dismissConnection then
+			dismissConnection:Disconnect()
+			dismissConnection = nil
+		end
 		tween(notification, 0.25, { Position = UDim2.fromOffset(350, 0) })
 		task.delay(0.27, function()
 			if slot.Parent then
@@ -910,7 +1116,13 @@ function WindowMethods:Notify(options: {[string]: any}?)
 			end
 		end)
 	end
-	table.insert(self._connections, dismissButton.MouseButton1Click:Connect(dismiss))
+	dismissConnection = dismissButton.MouseButton1Click:Connect(dismiss)
+	slot.Destroying:Connect(function()
+		if dismissConnection then
+			dismissConnection:Disconnect()
+			dismissConnection = nil
+		end
+	end)
 	tween(notification, 0.3, { Position = UDim2.fromOffset(0, 0) })
 	task.delay(options.Duration or 4, dismiss)
 end
@@ -971,7 +1183,7 @@ function WindowMethods:AddTab(options: any)
 		ImageTransparency = order == 1 and 0.08 or 0,
 		TextTransparency = 0.2,
 		TextSize = 17,
-	}, self.Assets, order == 1 and "Paw" or ((self.Assets.DarkCat ~= "" and "DarkCat") or "Logo"), "*")
+	}, self.Assets, order == 1 and "Paw" or "DarkCat", "*")
 
 	local page = create("ScrollingFrame", {
 		Name = tabName .. "Page",
@@ -1060,6 +1272,7 @@ function WindowMethods:SelectTab(tab: any)
 	if self._selectedTab == tab then
 		return
 	end
+	self:ClosePopups()
 	for _, item in ipairs(self.Tabs) do
 		local selected = item == tab
 		item.Page.Visible = selected
@@ -1088,7 +1301,13 @@ function WindowMethods:Destroy()
 		return
 	end
 	self._destroyed = true
+	self:ClosePopups()
 	disconnectAll(self._connections)
+	table.clear(self._inputBegan)
+	table.clear(self._inputChanged)
+	table.clear(self._inputEnded)
+	table.clear(self._popups)
+	table.clear(self.Flags)
 	if self.Gui then
 		self.Gui:Destroy()
 	end
@@ -1158,24 +1377,31 @@ function TabMethods:AddSection(options: any)
 	return section
 end
 
-local function addDivider(parent: Instance)
+local function addDivider(parent: Instance, order: number)
 	create("Frame", {
+		Name = "Divider",
 		Size = UDim2.new(1, 0, 0, 1),
 		BackgroundColor3 = Theme.Divider,
 		BorderSizePixel = 0,
+		LayoutOrder = order,
 		Parent = parent,
 	})
 end
 
 local function controlRow(section: any, height: number, title: string, description: string?, iconRole: string?): Frame
+	-- Rows and dividers used to share LayoutOrder 0, which left the card order up
+	-- to undefined tie-breaking inside UIListLayout. Every child now gets an
+	-- explicit slot: divider = even, row = odd.
+	local order = (#section.Controls * 2) + 1
 	if #section.Controls > 0 then
-		addDivider(section.Card)
+		addDivider(section.Card, order - 1)
 	end
 	local row = create("Frame", {
 		Name = title,
 		Size = UDim2.new(1, 0, 0, height),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		LayoutOrder = order,
 		Parent = section.Card,
 	}) :: Frame
 	local iconTile = create("Frame", {
@@ -1314,7 +1540,7 @@ function SectionMethods:AddButton(options: any)
 	function control:Fire()
 		safeCallback(options.Callback)
 	end
-	return control
+	return registerFlag(self, options.Flag, control)
 end
 
 function SectionMethods:AddToggle(options: any)
@@ -1448,25 +1674,29 @@ function SectionMethods:AddSlider(options: any)
 		return self
 	end
 	local function updateFromInput(input)
-		local alpha = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+		local width = bar.AbsoluteSize.X
+		if width <= 0 then
+			return
+		end
+		local alpha = math.clamp((input.Position.X - bar.AbsolutePosition.X) / width, 0, 1)
 		control:Set(minimum + ((maximum - minimum) * alpha))
 	end
 	table.insert(self.Window._connections, bar.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if isPressInput(input) then
 			dragging = true
 			updateFromInput(input)
 		end
 	end))
-	table.insert(self.Window._connections, UserInputService.InputChanged:Connect(function(input)
-		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+	table.insert(self.Window._inputChanged, function(input)
+		if dragging and isMoveInput(input) then
 			updateFromInput(input)
 		end
-	end))
-	table.insert(self.Window._connections, UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	end)
+	table.insert(self.Window._inputEnded, function(input)
+		if isPressInput(input) then
 			dragging = false
 		end
-	end))
+	end)
 	control:Set(control.Value, true)
 	return registerFlag(self, options.Flag, control)
 end
@@ -1527,18 +1757,23 @@ function SectionMethods:AddDropdown(options: any)
 			Parent = chevron,
 		}, { corner(2) })
 	end
+	-- The option list lives in the window overlay instead of inside the row: both
+	-- Content and the page ScrollingFrame clip descendants, so an in-row list was
+	-- cut off no matter how high its ZIndex was.
+	local listScale = create("UIScale", { Scale = 1 }) :: UIScale
 	local list = create("Frame", {
 		Name = "Options",
 		AnchorPoint = Vector2.new(0, 0),
-		Position = UDim2.new(0, 0, 1, 8),
-		Size = UDim2.new(1, 0, 0, 0),
+		Position = UDim2.fromOffset(0, 0),
+		Size = UDim2.fromOffset(268, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Theme.SurfaceHover,
 		BorderSizePixel = 0,
 		Visible = false,
-		ZIndex = 30,
-		Parent = dropdown,
+		ZIndex = 41,
+		Parent = self.Window.Overlay,
 	}, {
+		listScale,
 		corner(12),
 		stroke(Theme.Border, 0.02),
 		padding(7, 7, 7, 7),
@@ -1546,13 +1781,64 @@ function SectionMethods:AddDropdown(options: any)
 		gradient(Color3.fromRGB(58, 59, 62), Color3.fromRGB(34, 35, 37), 105),
 	}) :: Frame
 	local control = { Type = "Dropdown", Value = options.Default or values[1], Values = values, Instance = row }
+	local window = self.Window
+	local popup = {}
+	local trackConnection: RBXScriptConnection? = nil
+
+	local function positionList()
+		local anchor = dropdown.AbsolutePosition
+		local anchorSize = dropdown.AbsoluteSize
+		local scale = window._uiScale.Scale
+		listScale.Scale = scale
+		-- Width is set pre-scale so that after UIScale it matches the button.
+		list.Size = UDim2.fromOffset(anchorSize.X / scale, 0)
+
+		local camera = workspace.CurrentCamera
+		local viewportHeight = camera and camera.ViewportSize.Y or 0
+		local listHeight = list.AbsoluteSize.Y
+		local spaceBelow = viewportHeight - (anchor.Y + anchorSize.Y)
+		if viewportHeight > 0 and spaceBelow < listHeight + (14 * scale) then
+			list.AnchorPoint = Vector2.new(0, 1)
+			list.Position = UDim2.fromOffset(anchor.X, anchor.Y - (8 * scale))
+		else
+			list.AnchorPoint = Vector2.new(0, 0)
+			list.Position = UDim2.fromOffset(anchor.X, anchor.Y + anchorSize.Y + (8 * scale))
+		end
+	end
+
+	function popup.Close()
+		if not list.Visible then
+			return
+		end
+		list.Visible = false
+		if trackConnection then
+			trackConnection:Disconnect()
+			trackConnection = nil
+		end
+	end
+
+	function popup.Open()
+		window:ClosePopups(popup)
+		list.Visible = true
+		positionList()
+		-- Scrolling the page or dragging the window moves the button; follow it.
+		trackConnection = dropdown:GetPropertyChangedSignal("AbsolutePosition"):Connect(positionList)
+		task.defer(function()
+			if list.Visible then
+				positionList()
+			end
+		end)
+	end
+
+	table.insert(window._popups, popup)
+
 	function control:Set(value: any, silent: boolean?)
 		if not table.find(self.Values, value) then
 			return
 		end
 		self.Value = value
 		valueText.Text = tostring(value)
-		list.Visible = false
+		popup.Close()
 		if not silent then
 			safeCallback(options.Callback, value)
 		end
@@ -1583,7 +1869,7 @@ function SectionMethods:AddDropdown(options: any)
 				TextSize = 15,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				LayoutOrder = index,
-				ZIndex = 31,
+				ZIndex = 42,
 				Parent = list,
 			}, { corner(6), padding(0, 8, 0, 8) })
 			table.insert(control.Window._connections, option.MouseEnter:Connect(function()
@@ -1602,28 +1888,31 @@ function SectionMethods:AddDropdown(options: any)
 	if control.Value then
 		control:Set(control.Value, true)
 	end
-	table.insert(self.Window._connections, dropdown.MouseButton1Click:Connect(function()
+	table.insert(window._connections, dropdown.MouseButton1Click:Connect(function()
 		if list.Visible then
-			list.Visible = false
+			popup.Close()
+		else
+			popup.Open()
+		end
+	end))
+
+	-- Clicking anywhere outside the button and the list closes the dropdown.
+	table.insert(window._inputBegan, function(input)
+		if not list.Visible or not isPressInput(input) then
 			return
 		end
-		list.Visible = true
-		task.defer(function()
-			if not list.Parent then
-				return
-			end
-			local pageBottom = self.Window.Pages.AbsolutePosition.Y + self.Window.Pages.AbsoluteSize.Y
-			local dropdownBottom = dropdown.AbsolutePosition.Y + dropdown.AbsoluteSize.Y
-			local spaceBelow = pageBottom - dropdownBottom
-			if spaceBelow < list.AbsoluteSize.Y + 14 then
-				list.AnchorPoint = Vector2.new(0, 1)
-				list.Position = UDim2.new(0, 0, 0, -8)
-			else
-				list.AnchorPoint = Vector2.new(0, 0)
-				list.Position = UDim2.new(0, 0, 1, 8)
-			end
-		end)
-	end))
+		local point = Vector2.new(input.Position.X, input.Position.Y)
+		local function contains(element: GuiObject): boolean
+			local origin = element.AbsolutePosition
+			local size = element.AbsoluteSize
+			return point.X >= origin.X and point.X <= origin.X + size.X
+				and point.Y >= origin.Y and point.Y <= origin.Y + size.Y
+		end
+		if not contains(dropdown) and not contains(list) then
+			popup.Close()
+		end
+	end)
+
 	return registerFlag(self, options.Flag, control)
 end
 
@@ -1688,7 +1977,7 @@ function SectionMethods:AddKeybind(options: any)
 	local control = { Type = "Keybind", Value = options.Default or Enum.KeyCode.RightShift, Instance = row, Listening = false }
 	function control:Set(value: Enum.KeyCode, silent: boolean?)
 		self.Value = value
-		keyLabel.Text = value.Name
+		keyLabel.Text = value == Enum.KeyCode.Unknown and "None" or value.Name
 		if not silent then
 			safeCallback(options.ChangedCallback, value)
 		end
@@ -1698,18 +1987,27 @@ function SectionMethods:AddKeybind(options: any)
 		control.Listening = true
 		keyLabel.Text = "..."
 	end))
-	table.insert(self.Window._connections, UserInputService.InputBegan:Connect(function(input, processed)
+	table.insert(self.Window._inputBegan, function(input, processed)
 		if control.Listening then
-			if input.KeyCode ~= Enum.KeyCode.Unknown then
-				control.Listening = false
+			-- Without the `processed` guard, typing into any textbox rebound the
+			-- key. Escape cancels, Backspace clears the bind.
+			if processed or input.KeyCode == Enum.KeyCode.Unknown then
+				return
+			end
+			control.Listening = false
+			if input.KeyCode == Enum.KeyCode.Escape then
+				control:Set(control.Value, true)
+			elseif input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete then
+				control:Set(Enum.KeyCode.Unknown)
+			else
 				control:Set(input.KeyCode)
 			end
 			return
 		end
-		if not processed and input.KeyCode == control.Value then
+		if not processed and control.Value ~= Enum.KeyCode.Unknown and input.KeyCode == control.Value then
 			safeCallback(options.Callback)
 		end
-	end))
+	end)
 	return registerFlag(self, options.Flag, control)
 end
 
