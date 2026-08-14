@@ -10,21 +10,48 @@ local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
 KittenHub.__index = KittenHub
-KittenHub.Version = "0.1.0"
+KittenHub.Version = "0.2.0"
 KittenHub.AssetId = "rbxassetid://89700767026016"
+KittenHub.SpriteSheetId = "rbxassetid://75770413731434"
+
+-- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
+-- Fredoka One, Builder Sans, and Builder Mono provide a native visual equivalent.
+local Fonts = {
+	Display = Font.new("rbxasset://fonts/families/FredokaOne.json", Enum.FontWeight.Regular),
+	Body = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Regular),
+	Medium = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium),
+	Semibold = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.SemiBold),
+	Bold = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Bold),
+	Mono = Font.new("rbxasset://fonts/families/BuilderMono.json", Enum.FontWeight.Regular),
+}
 
 local Theme = {
-	Background = Color3.fromRGB(9, 10, 10),
-	Surface = Color3.fromRGB(15, 16, 16),
-	SurfaceHover = Color3.fromRGB(22, 23, 23),
-	Selected = Color3.fromRGB(27, 28, 28),
-	Border = Color3.fromRGB(37, 38, 38),
-	Divider = Color3.fromRGB(27, 28, 28),
-	Text = Color3.fromRGB(245, 245, 247),
-	MutedText = Color3.fromRGB(153, 153, 159),
-	FaintText = Color3.fromRGB(105, 105, 110),
+	Background = Color3.fromRGB(10, 10, 11),
+	Surface = Color3.fromRGB(16, 16, 18),
+	SurfaceHover = Color3.fromRGB(23, 23, 26),
+	Selected = Color3.fromRGB(29, 29, 32),
+	Border = Color3.fromRGB(42, 42, 46),
+	Divider = Color3.fromRGB(31, 31, 34),
+	Text = Color3.fromRGB(244, 244, 245),
+	MutedText = Color3.fromRGB(161, 161, 170),
+	FaintText = Color3.fromRGB(113, 113, 122),
+	Accent = Color3.fromRGB(255, 255, 255),
+	AccentSoft = Color3.fromRGB(222, 222, 226),
+	Track = Color3.fromRGB(61, 61, 65),
+	Shadow = Color3.fromRGB(0, 0, 0),
 	White = Color3.fromRGB(255, 255, 255),
 	Black = Color3.fromRGB(0, 0, 0),
+	Fonts = Fonts,
+}
+
+-- Rectangles for assets/kitten-sprites.png (1254x1254).
+local SpriteRects = {
+	Logo = { Offset = Vector2.new(40, 251), Size = Vector2.new(378, 333) },
+	Paw = { Offset = Vector2.new(418, 288), Size = Vector2.new(418, 274) },
+	Heart = { Offset = Vector2.new(917, 283), Size = Vector2.new(278, 260) },
+	Sleeping = { Offset = Vector2.new(28, 712), Size = Vector2.new(390, 259) },
+	Peek = { Offset = Vector2.new(418, 732), Size = Vector2.new(418, 245) },
+	Curled = { Offset = Vector2.new(836, 706), Size = Vector2.new(373, 275) },
 }
 
 local function create(className: string, properties: {[string]: any}?, children: {Instance}?): Instance
@@ -68,11 +95,110 @@ local function listLayout(paddingAmount: number): UIListLayout
 	}) :: UIListLayout
 end
 
+local function gradient(topColor: Color3, bottomColor: Color3, rotation: number?): UIGradient
+	return create("UIGradient", {
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, topColor),
+			ColorSequenceKeypoint.new(1, bottomColor),
+		}),
+		Rotation = rotation or 90,
+	}) :: UIGradient
+end
+
+local function dashedLine(parent: Instance, y: number, left: number, right: number, width: number)
+	local holder = create("Frame", {
+		Name = "DashedDivider",
+		Position = UDim2.new(0, left, 0, y),
+		Size = UDim2.new(1, -(left + right), 0, 1),
+		BackgroundTransparency = 1,
+		LayoutOrder = 1,
+		Parent = parent,
+	}) :: Frame
+	local count = math.max(1, math.floor(width / 18))
+	for index = 0, count - 1 do
+		create("Frame", {
+			Position = UDim2.new(index / count, 0, 0, 0),
+			Size = UDim2.fromOffset(9, 1),
+			BackgroundColor3 = Theme.FaintText,
+			BackgroundTransparency = 0.38,
+			BorderSizePixel = 0,
+			Parent = holder,
+		})
+	end
+	return holder
+end
+
+local function imageOrGlyph(parent: Instance, properties: {[string]: any}, imageId: string?, glyph: string): GuiObject
+	if imageId and imageId ~= "" then
+		properties.TextTransparency = nil
+		properties.TextSize = nil
+		properties.TextXAlignment = nil
+		properties.TextYAlignment = nil
+		properties.TextColor3 = nil
+		properties.FontFace = nil
+		properties.TextWrapped = nil
+		properties.Image = imageId
+		properties.ScaleType = properties.ScaleType or Enum.ScaleType.Fit
+		properties.BackgroundTransparency = 1
+		properties.Parent = parent
+		return create("ImageLabel", properties) :: ImageLabel
+	end
+	properties.ImageTransparency = nil
+	properties.ImageColor3 = nil
+	properties.ScaleType = nil
+	properties.BackgroundTransparency = 1
+	properties.BorderSizePixel = 0
+	properties.FontFace = Fonts.Display
+	properties.Text = glyph
+	properties.TextColor3 = Theme.FaintText
+	properties.TextTransparency = properties.TextTransparency or 0
+	properties.Parent = parent
+	return create("TextLabel", properties) :: TextLabel
+end
+
+local function spriteOrGlyph(parent: Instance, properties: {[string]: any}, assets: {[string]: any}, role: string, glyph: string): GuiObject
+	local rect = SpriteRects[role]
+	if assets.SpriteSheet and assets.SpriteSheet ~= "" and rect then
+		properties.ImageRectOffset = rect.Offset
+		properties.ImageRectSize = rect.Size
+		return imageOrGlyph(parent, properties, assets.SpriteSheet, glyph)
+	end
+	local direct = assets[role]
+	if not direct and role == "Logo" then
+		direct = assets.Logo or assets.RowIcon
+	elseif not direct and role == "Curled" then
+		direct = assets.RowIcon
+	elseif not direct and role == "Sleeping" then
+		direct = assets.CornerCat
+	end
+	return imageOrGlyph(parent, properties, direct, glyph)
+end
+
+local function addSoftPattern(parent: Instance, assets: {[string]: any})
+	local marks = {
+		{0.08, 0.12, 18, 0.84}, {0.23, 0.34, 26, 0.9}, {0.47, 0.16, 16, 0.92},
+		{0.66, 0.58, 25, 0.89}, {0.88, 0.31, 18, 0.91}, {0.76, 0.86, 14, 0.92},
+	}
+	for index, mark in ipairs(marks) do
+		local item = spriteOrGlyph(parent, {
+			Name = "Pattern" .. index,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(mark[1], mark[2]),
+			Size = UDim2.fromOffset(mark[3], mark[3]),
+			ImageTransparency = mark[4],
+			TextTransparency = mark[4],
+			TextSize = mark[3],
+			ZIndex = 1,
+		}, assets, "Paw", "✦")
+		item.Rotation = (index % 2 == 0) and 12 or -10
+	end
+end
+
 local function label(properties: {[string]: any}): TextLabel
 	local defaults = {
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Font = Enum.Font.Gotham,
+		FontFace = Fonts.Body,
 		TextColor3 = Theme.Text,
 		TextSize = 15,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -89,7 +215,7 @@ local function button(properties: {[string]: any}, children: {Instance}?): TextB
 		AutoButtonColor = false,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Font = Enum.Font.Gotham,
+		FontFace = Fonts.Body,
 		Text = "",
 		TextColor3 = Theme.Text,
 		TextSize = 15,
@@ -151,12 +277,14 @@ local function makeDraggable(window: any, handle: GuiObject, target: GuiObject)
 	local dragging = false
 	local dragStart = Vector2.zero
 	local startPosition = target.Position
+	local shadowStart = window._shadow and window._shadow.Position or nil
 
 	table.insert(window._connections, handle.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
 			dragging = true
 			dragStart = input.Position
 			startPosition = target.Position
+			shadowStart = window._shadow and window._shadow.Position or nil
 		end
 	end))
 
@@ -177,6 +305,14 @@ local function makeDraggable(window: any, handle: GuiObject, target: GuiObject)
 			startPosition.Y.Scale,
 			startPosition.Y.Offset + delta.Y
 		)
+		if window._shadow and shadowStart then
+			window._shadow.Position = UDim2.new(
+				shadowStart.X.Scale,
+				shadowStart.X.Offset + delta.X,
+				shadowStart.Y.Scale,
+				shadowStart.Y.Offset + delta.Y
+			)
+		end
 	end))
 end
 
@@ -188,18 +324,24 @@ local function updateResponsiveScale(window: any)
 	local viewport = camera.ViewportSize
 	local usableWidth = math.max(viewport.X - 40, 320)
 	local usableHeight = math.max(viewport.Y - 40, 240)
-	-- 1248x687 is the design canvas, not the final unscaled Roblox footprint.
-	-- A default 0.8 scale keeps the entire window near 1248x687 on 125% DPI displays.
+	-- 1280x760 is the design canvas; UIScale preserves the composition on smaller viewports.
 	local scale = math.min(window._designScale, usableWidth / window._baseSize.X, usableHeight / window._baseSize.Y)
 	window._uiScale.Scale = math.clamp(scale, 0.48, 1)
+	if window._shadow then
+		window._shadow.Size = UDim2.fromOffset((window._baseSize.X + 18) * scale, (window._baseSize.Y + 18) * scale)
+	end
 end
 
 function KittenHub:CreateWindow(options: {[string]: any}?)
 	options = options or {}
-	local baseSize = options.Size or Vector2.new(1248, 687)
-	local designScale = options.Scale or 0.8
+	local baseSize = options.Size or Vector2.new(1280, 760)
+	local designScale = options.Scale or 0.78
 	local title = options.Title or "KittenHub"
 	local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
+	local assets = options.Assets or {}
+	assets.SpriteSheet = assets.SpriteSheet or KittenHub.SpriteSheetId
+	assets.Logo = assets.Logo or options.Icon or KittenHub.AssetId
+	assets.RowIcon = assets.RowIcon or assets.Logo
 
 	local existing = getParent():FindFirstChild("KittenHubUI")
 	if existing then
@@ -215,6 +357,17 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = getParent(),
 	}) :: ScreenGui
 
+	local shadow = create("Frame", {
+		Name = "WindowShadow",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.5, 8),
+		Size = UDim2.fromOffset(baseSize.X + 18, baseSize.Y + 18),
+		BackgroundColor3 = Theme.Shadow,
+		BackgroundTransparency = 0.48,
+		BorderSizePixel = 0,
+		Parent = screenGui,
+	}, { corner(24) }) :: Frame
+
 	local root = create("Frame", {
 		Name = "Window",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -224,14 +377,19 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 		Parent = screenGui,
-	}, { corner(13), stroke(Theme.Border) }) :: Frame
+	}, {
+		corner(18),
+		stroke(Theme.Border, 0.1),
+		gradient(Color3.fromRGB(12, 13, 13), Color3.fromRGB(7, 8, 8), 115),
+	}) :: Frame
+	addSoftPattern(root, assets)
 
 	local uiScale = create("UIScale", { Scale = 1, Parent = root }) :: UIScale
 
 	local topbar = create("Frame", {
 		Name = "Topbar",
-		Size = UDim2.new(1, 0, 0, 70),
-		BackgroundColor3 = Theme.Background,
+		Size = UDim2.new(1, 0, 0, 76),
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Parent = root,
 	}) :: Frame
@@ -239,8 +397,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	create("Frame", {
 		Name = "TopDivider",
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 252, 1, 0),
-		Size = UDim2.new(1, -252, 0, 1),
+		Position = UDim2.new(0, 306, 1, 0),
+		Size = UDim2.new(1, -320, 0, 1),
 		BackgroundColor3 = Theme.Divider,
 		BorderSizePixel = 0,
 		Parent = topbar,
@@ -248,36 +406,43 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 
 	local brand = create("Frame", {
 		Name = "Brand",
-		Size = UDim2.fromOffset(252, 70),
+		Size = UDim2.fromOffset(306, 76),
 		BackgroundTransparency = 1,
 		Parent = topbar,
 	}) :: Frame
 
-	create("ImageLabel", {
+	spriteOrGlyph(brand, {
 		Name = "KittenIcon",
-		Position = UDim2.fromOffset(16, 18),
-		Size = UDim2.fromOffset(34, 34),
-		BackgroundTransparency = 1,
-		Image = options.Icon or KittenHub.AssetId,
-		ScaleType = Enum.ScaleType.Fit,
-		Parent = brand,
-	})
+		Position = UDim2.fromOffset(22, 16),
+		Size = UDim2.fromOffset(44, 44),
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		TextSize = 28,
+	}, assets, "Logo", "✦")
 
 	label({
 		Name = "Title",
-		Position = UDim2.fromOffset(58, 0),
-		Size = UDim2.new(1, -68, 1, 0),
-		Font = Enum.Font.GothamBold,
+		Position = UDim2.fromOffset(76, 0),
+		Size = UDim2.new(1, -88, 1, 0),
+		FontFace = Fonts.Display,
 		Text = title,
-		TextSize = 22,
+		TextSize = 28,
 		Parent = brand,
 	})
+	spriteOrGlyph(brand, {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		Size = UDim2.fromOffset(26, 26),
+		TextSize = 21,
+		ImageTransparency = 0.08,
+		TextTransparency = 0.08,
+	}, assets, "Paw", "✦")
 
 	local windowControls = create("Frame", {
 		Name = "WindowControls",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -12, 0, 0),
-		Size = UDim2.fromOffset(126, 70),
+		Size = UDim2.fromOffset(132, 76),
 		BackgroundTransparency = 1,
 		Parent = topbar,
 	}) :: Frame
@@ -321,38 +486,43 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 
 	local sidebar = create("Frame", {
 		Name = "Sidebar",
-		Position = UDim2.fromOffset(0, 70),
-		Size = UDim2.new(0, 252, 1, -70),
-		BackgroundColor3 = Theme.Background,
+		Position = UDim2.fromOffset(14, 142),
+		Size = UDim2.new(0, 276, 1, -156),
+		BackgroundColor3 = Theme.Surface,
 		BorderSizePixel = 0,
 		Parent = root,
+	}, {
+		corner(20),
+		stroke(Theme.Border, 0.05),
+		gradient(Color3.fromRGB(27, 27, 29), Color3.fromRGB(13, 14, 15), 110),
 	}) :: Frame
+	addSoftPattern(sidebar, assets)
 
 	create("Frame", {
 		Name = "SidebarDivider",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.fromScale(1, 0),
 		Size = UDim2.new(0, 1, 1, 0),
-		BackgroundColor3 = Theme.Divider,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Parent = sidebar,
 	})
 
 	local sidebarHeader = label({
 		Name = "SidebarHeader",
-		Position = UDim2.fromOffset(17, 15),
-		Size = UDim2.new(1, -34, 0, 56),
-		Font = Enum.Font.GothamBold,
+		Position = UDim2.fromOffset(20, 18),
+		Size = UDim2.new(1, -40, 0, 52),
+		FontFace = Fonts.Display,
 		Text = options.PageTitle or "Home",
-		TextSize = 27,
+		TextSize = 25,
 		Parent = sidebar,
 	})
 	local _sidebarHeader = sidebarHeader
 
 	local tabList = create("ScrollingFrame", {
 		Name = "TabList",
-		Position = UDim2.fromOffset(8, 78),
-		Size = UDim2.new(1, -16, 1, -166),
+		Position = UDim2.fromOffset(12, 82),
+		Size = UDim2.new(1, -24, 1, -174),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 2,
@@ -365,35 +535,35 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	local footer = create("Frame", {
 		Name = "Footer",
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 9, 1, -10),
-		Size = UDim2.new(1, -18, 0, 57),
-		BackgroundColor3 = Theme.Surface,
+		Position = UDim2.new(0, 12, 1, -12),
+		Size = UDim2.new(1, -24, 0, 66),
+		BackgroundColor3 = Theme.SurfaceHover,
 		BorderSizePixel = 0,
 		Parent = sidebar,
-	}, { corner(12) }) :: Frame
+	}, { corner(15), stroke(Theme.Border, 0.2) }) :: Frame
 
-	create("ImageLabel", {
+	spriteOrGlyph(footer, {
 		Name = "Avatar",
 		Position = UDim2.fromOffset(10, 10),
-		Size = UDim2.fromOffset(37, 37),
+		Size = UDim2.fromOffset(46, 46),
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
-		Image = KittenHub.AssetId,
-		ScaleType = Enum.ScaleType.Fit,
-		Parent = footer,
-	}, { corner(19) })
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		TextSize = 26,
+	}, assets, "Logo", "✦")
 
 	label({
-		Position = UDim2.fromOffset(57, 7),
-		Size = UDim2.new(1, -84, 0, 24),
-		Font = Enum.Font.GothamBold,
+		Position = UDim2.fromOffset(68, 9),
+		Size = UDim2.new(1, -96, 0, 24),
+		FontFace = Fonts.Bold,
 		Text = options.UserName or (LocalPlayer and LocalPlayer.DisplayName) or "Player",
 		TextSize = 14,
 		Parent = footer,
 	})
 	label({
-		Position = UDim2.fromOffset(57, 27),
-		Size = UDim2.new(1, -84, 0, 20),
+		Position = UDim2.fromOffset(68, 33),
+		Size = UDim2.new(1, -96, 0, 20),
 		Text = options.UserStatus or "Signed in",
 		TextColor3 = Theme.MutedText,
 		TextSize = 12,
@@ -412,29 +582,47 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 
 	local content = create("Frame", {
 		Name = "Content",
-		Position = UDim2.fromOffset(252, 70),
-		Size = UDim2.new(1, -252, 1, -70),
-		BackgroundColor3 = Theme.Background,
+		Position = UDim2.fromOffset(306, 64),
+		Size = UDim2.new(1, -320, 1, -78),
+		BackgroundColor3 = Theme.Surface,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 		Parent = root,
+	}, {
+		corner(20),
+		stroke(Theme.Border, 0.05),
+		gradient(Color3.fromRGB(19, 20, 20), Color3.fromRGB(10, 11, 11), 105),
 	}) :: Frame
+	addSoftPattern(content, assets)
+	spriteOrGlyph(content, {
+		Name = "CornerMascot",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -24, 0, 14),
+		Size = UDim2.fromOffset(108, 66),
+		TextSize = 26,
+		ImageTransparency = 0,
+		TextTransparency = 0.18,
+		ZIndex = 4,
+	}, assets, "Sleeping", "♡")
 
 	local pages = create("Frame", {
 		Name = "Pages",
 		Position = UDim2.fromOffset(0, 0),
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
+		ZIndex = 2,
 		Parent = content,
 	}) :: Frame
 
 	local window = setmetatable({
 		Gui = screenGui,
 		Root = root,
+		_shadow = shadow,
 		Sidebar = sidebar,
 		TabList = tabList,
 		Pages = pages,
 		Theme = Theme,
+		Assets = assets,
 		Tabs = {},
 		Flags = {},
 		_connections = {},
@@ -465,14 +653,17 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	table.insert(window._connections, minimize.MouseButton1Click:Connect(function()
 		window._minimized = not window._minimized
 		if window._minimized then
-			tween(root, 0.25, { Size = UDim2.fromOffset(baseSize.X, 70) })
+			tween(root, 0.25, { Size = UDim2.fromOffset(baseSize.X, 76) })
+			shadow.Visible = false
 		else
 			tween(root, 0.25, { Size = UDim2.fromOffset(baseSize.X, baseSize.Y) })
+			shadow.Visible = true
 		end
 	end))
 
 	table.insert(window._connections, maximize.MouseButton1Click:Connect(function()
 		root.Position = UDim2.fromScale(0.5, 0.5)
+		shadow.Position = UDim2.new(0.5, 0, 0.5, 8)
 		updateResponsiveScale(window)
 	end))
 
@@ -533,10 +724,10 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		BackgroundTransparency = 0.03,
 		BorderSizePixel = 0,
 		Parent = holder,
-	}, { corner(11), stroke(Theme.Border), padding(13, 15, 13, 15) }) :: Frame
+	}, { corner(10), stroke(Theme.Border, 0.15), padding(13, 15, 13, 15) }) :: Frame
 	label({
 		Size = UDim2.new(1, 0, 0, 24),
-		Font = Enum.Font.GothamBold,
+		FontFace = Fonts.Bold,
 		Text = options.Title or "KittenHub",
 		TextSize = 15,
 		Parent = notification,
@@ -568,37 +759,41 @@ function WindowMethods:AddTab(options: any)
 	end
 	options = options or {}
 	local tabName = options.Name or "New Tab"
-	local tabIcon = options.Icon or "◇"
+	local tabIcon = options.Icon or "✦"
 	local order = #self.Tabs + 1
 
 	local tabButton = button({
 		Name = tabName,
-		Size = UDim2.new(1, 0, 0, 48),
+		Size = UDim2.new(1, 0, 0, 56),
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 1,
 		Text = "",
 		LayoutOrder = order,
 		Parent = self.TabList,
-	}, { corner(11) })
-
-	label({
-		Name = "Icon",
-		Position = UDim2.fromOffset(14, 0),
-		Size = UDim2.fromOffset(24, 48),
-		Text = tabIcon,
-		TextColor3 = Theme.MutedText,
-		TextSize = 17,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Parent = tabButton,
+	}, {
+		corner(14),
+		stroke(Theme.Border, 0.35),
+		gradient(Color3.fromRGB(52, 52, 55), Color3.fromRGB(32, 32, 35), 100),
 	})
+
+	local tabIconImage = if type(tabIcon) == "string" and string.find(tabIcon, "rbxasset", 1, true) == 1 then tabIcon else nil
+	imageOrGlyph(tabButton, {
+		Name = "Icon",
+		Position = UDim2.fromOffset(16, 0),
+		Size = UDim2.fromOffset(28, 56),
+		TextSize = 20,
+		ImageTransparency = 0.25,
+		TextTransparency = 0,
+		TextXAlignment = Enum.TextXAlignment.Center,
+	}, tabIconImage, tabIconImage and "" or tostring(tabIcon))
 	label({
 		Name = "TabName",
-		Position = UDim2.fromOffset(49, 0),
+		Position = UDim2.fromOffset(55, 0),
 		Size = UDim2.new(1, -62, 1, 0),
-		Font = Enum.Font.GothamSemibold,
+		FontFace = Fonts.Semibold,
 		Text = tabName,
 		TextColor3 = Theme.Text,
-		TextSize = 15,
+		TextSize = 16,
 		Parent = tabButton,
 	})
 
@@ -614,17 +809,27 @@ function WindowMethods:AddTab(options: any)
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		Visible = false,
 		Parent = self.Pages,
-	}, { padding(24, 35, 30, 31), listLayout(14) }) :: ScrollingFrame
+	}, { padding(30, 28, 30, 28), listLayout(18) }) :: ScrollingFrame
 
 	label({
 		Name = "PageTitle",
-		Size = UDim2.new(1, 0, 0, 40),
-		Font = Enum.Font.GothamBold,
+		Size = UDim2.new(1, 0, 0, 58),
+		FontFace = Fonts.Display,
 		Text = tabName,
-		TextSize = 24,
+		TextSize = 32,
 		LayoutOrder = 0,
 		Parent = page,
 	})
+	local pageDivider = dashedLine(page, 0, 0, 0, 900)
+	spriteOrGlyph(pageDivider, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(28, 28),
+		TextSize = 20,
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		ZIndex = 3,
+	}, self.Assets, "Heart", "♥")
 
 	local tab = setmetatable({
 		Window = self,
@@ -664,9 +869,12 @@ function WindowMethods:SelectTab(tab: any)
 		local selected = item == tab
 		item.Page.Visible = selected
 		tween(item.Button, 0.18, { BackgroundTransparency = selected and 0 or 1 })
-		local icon = item.Button:FindFirstChild("Icon") :: TextLabel?
-		if icon then
+		local icon = item.Button:FindFirstChild("Icon")
+		if icon and icon:IsA("TextLabel") then
 			icon.TextColor3 = selected and Theme.Text or Theme.MutedText
+		elseif icon and icon:IsA("ImageLabel") then
+			icon.ImageColor3 = selected and Theme.Text or Theme.MutedText
+			icon.ImageTransparency = selected and 0 or 0.25
 		end
 	end
 	self._selectedTab = tab
@@ -708,23 +916,37 @@ function TabMethods:AddSection(options: any)
 
 	label({
 		Name = "SectionTitle",
-		Size = UDim2.new(1, 0, 0, 28),
-		Font = Enum.Font.GothamSemibold,
+		Position = UDim2.fromOffset(30, 0),
+		Size = UDim2.new(1, -30, 0, 32),
+		FontFace = Fonts.Semibold,
 		Text = name,
-		TextColor3 = Theme.MutedText,
-		TextSize = 13,
+		TextColor3 = Theme.Text,
+		TextSize = 16,
 		Parent = wrapper,
 	})
+	spriteOrGlyph(wrapper, {
+		Position = UDim2.fromOffset(0, 3),
+		Size = UDim2.fromOffset(22, 22),
+		TextSize = 18,
+		ImageTransparency = 0.12,
+		TextTransparency = 0.12,
+	}, self.Window.Assets, "Paw", "✦")
 
 	local card = create("Frame", {
 		Name = "Card",
-		Position = UDim2.fromOffset(0, 32),
+		Position = UDim2.fromOffset(0, 38),
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Theme.Surface,
 		BorderSizePixel = 0,
 		Parent = wrapper,
-	}, { corner(12), stroke(Theme.Border, 0.45), padding(4, 14, 4, 14), listLayout(0) }) :: Frame
+	}, {
+		corner(18),
+		stroke(Theme.Border, 0.05),
+		padding(6, 16, 6, 16),
+		listLayout(0),
+		gradient(Color3.fromRGB(31, 31, 33), Color3.fromRGB(20, 21, 22), 105),
+	}) :: Frame
 
 	local section = setmetatable({
 		Tab = self,
@@ -758,11 +980,28 @@ local function controlRow(section: any, height: number, title: string, descripti
 		BorderSizePixel = 0,
 		Parent = section.Card,
 	}) :: Frame
+	local iconTile = create("Frame", {
+		Name = "IconTile",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 4, 0.5, 0),
+		Size = UDim2.fromOffset(48, 48),
+		BackgroundColor3 = Theme.Selected,
+		BorderSizePixel = 0,
+		Parent = row,
+	}, { corner(12), stroke(Theme.Border, 0.15) }) :: Frame
+	spriteOrGlyph(iconTile, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(36, 36),
+		TextSize = 22,
+		ImageTransparency = 0,
+		TextTransparency = 0,
+	}, section.Window.Assets, "Curled", "✦")
 	label({
 		Name = "Title",
-		Position = UDim2.fromOffset(6, description and 6 or 0),
-		Size = UDim2.new(0.62, -6, 0, description and 28 or height),
-		Font = Enum.Font.GothamSemibold,
+		Position = UDim2.fromOffset(66, description and 7 or 0),
+		Size = UDim2.new(0.62, -66, 0, description and 28 or height),
+		FontFace = Fonts.Semibold,
 		Text = title,
 		TextSize = 14,
 		Parent = row,
@@ -770,8 +1009,8 @@ local function controlRow(section: any, height: number, title: string, descripti
 	if description then
 		label({
 			Name = "Description",
-			Position = UDim2.fromOffset(6, 31),
-			Size = UDim2.new(0.75, -6, 0, 23),
+			Position = UDim2.fromOffset(66, 32),
+			Size = UDim2.new(0.75, -66, 0, 23),
 			Text = description,
 			TextColor3 = Theme.MutedText,
 			TextSize = 12,
@@ -811,18 +1050,22 @@ function SectionMethods:AddButton(options: any)
 	end
 	options = options or {}
 	local text = options.Text or "Button"
-	local row = controlRow(self, options.Description and 62 or 52, text, options.Description)
+	local row = controlRow(self, options.Description and 70 or 60, text, options.Description)
 	local action = button({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
-		Size = UDim2.fromOffset(104, 34),
+		Size = UDim2.fromOffset(136, 42),
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
 		Text = options.ButtonText or "Run",
 		TextColor3 = Theme.Text,
 		TextSize = 13,
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border) })
+	}, {
+		corner(12),
+		stroke(Theme.Border, 0.05),
+		gradient(Color3.fromRGB(67, 67, 70), Color3.fromRGB(40, 40, 43), 105),
+	})
 	table.insert(self.Window._connections, action.MouseEnter:Connect(function()
 		tween(action, 0.15, { BackgroundColor3 = Theme.SurfaceHover })
 	end))
@@ -842,29 +1085,29 @@ end
 function SectionMethods:AddToggle(options: any)
 	options = options or {}
 	local text = options.Text or "Toggle"
-	local row = controlRow(self, options.Description and 62 or 52, text, options.Description)
+	local row = controlRow(self, options.Description and 70 or 60, text, options.Description)
 	local track = button({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
-		Size = UDim2.fromOffset(42, 23),
+		Size = UDim2.fromOffset(68, 34),
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
 		Parent = row,
-	}, { corner(12), stroke(Theme.Border) })
+	}, { corner(17), stroke(Theme.Border, 0.05) })
 	local knob = create("Frame", {
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 3, 0.5, 0),
-		Size = UDim2.fromOffset(17, 17),
+		Position = UDim2.new(0, 4, 0.5, 0),
+		Size = UDim2.fromOffset(26, 26),
 		BackgroundColor3 = Theme.MutedText,
 		BorderSizePixel = 0,
 		Parent = track,
-	}, { corner(9) }) :: Frame
+	}, { corner(13) }) :: Frame
 	local control = { Type = "Toggle", Value = options.Default == true, Instance = row }
 	function control:Set(value: boolean, silent: boolean?)
 		self.Value = value == true
 		tween(track, 0.18, { BackgroundColor3 = self.Value and Theme.White or Theme.Selected })
 		tween(knob, 0.18, {
-			Position = self.Value and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+			Position = self.Value and UDim2.new(1, -30, 0.5, 0) or UDim2.new(0, 4, 0.5, 0),
 			BackgroundColor3 = self.Value and Theme.Black or Theme.MutedText,
 		})
 		if not silent then
@@ -888,38 +1131,39 @@ function SectionMethods:AddSlider(options: any)
 	local minimum = options.Min or 0
 	local maximum = options.Max or 100
 	local increment = options.Increment or 1
-	local row = controlRow(self, 78, text, options.Description)
+	local row = controlRow(self, 88, text, options.Description)
 	local valueLabel = label({
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -5, 0, 3),
 		Size = UDim2.fromOffset(100, 28),
 		Text = "",
+		FontFace = Fonts.Mono,
 		TextColor3 = Theme.Text,
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = row,
 	})
 	local bar = button({
-		Position = UDim2.new(0, 6, 1, -24),
-		Size = UDim2.new(1, -12, 0, 5),
-		BackgroundColor3 = Theme.Selected,
+		Position = UDim2.new(0, 66, 1, -25),
+		Size = UDim2.new(1, -76, 0, 8),
+		BackgroundColor3 = Theme.Track,
 		BackgroundTransparency = 0,
 		Parent = row,
-	}, { corner(3) })
+	}, { corner(4) })
 	local fill = create("Frame", {
 		Size = UDim2.fromScale(0, 1),
 		BackgroundColor3 = Theme.White,
 		BorderSizePixel = 0,
 		Parent = bar,
-	}, { corner(3) }) :: Frame
+	}, { corner(4) }) :: Frame
 	local knob = create("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.fromOffset(13, 13),
+		Size = UDim2.fromOffset(20, 20),
 		BackgroundColor3 = Theme.White,
 		BorderSizePixel = 0,
 		Parent = bar,
-	}, { corner(7), stroke(Theme.Border) }) :: Frame
+	}, { corner(10), stroke(Theme.Border, 0.05) }) :: Frame
 	local control = { Type = "Slider", Value = options.Default or minimum, Instance = row }
 	local dragging = false
 
@@ -967,16 +1211,20 @@ function SectionMethods:AddDropdown(options: any)
 	options = options or {}
 	local text = options.Text or "Dropdown"
 	local values = options.Values or {}
-	local row = controlRow(self, 58, text, options.Description)
+	local row = controlRow(self, 68, text, options.Description)
 	local dropdown = button({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
-		Size = UDim2.fromOffset(190, 36),
+		Size = UDim2.fromOffset(220, 44),
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
 		Text = "",
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border) })
+	}, {
+		corner(12),
+		stroke(Theme.Border, 0.05),
+		gradient(Color3.fromRGB(59, 59, 62), Color3.fromRGB(38, 38, 41), 105),
+	})
 	local valueText = label({
 		Position = UDim2.fromOffset(12, 0),
 		Size = UDim2.new(1, -42, 1, 0),
@@ -1065,15 +1313,15 @@ end
 function SectionMethods:AddTextbox(options: any)
 	options = options or {}
 	local text = options.Text or "Textbox"
-	local row = controlRow(self, 58, text, options.Description)
+	local row = controlRow(self, 68, text, options.Description)
 	local textbox = create("TextBox", {
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
-		Size = UDim2.fromOffset(220, 36),
+		Size = UDim2.fromOffset(240, 44),
 		BackgroundColor3 = Theme.Selected,
 		BorderSizePixel = 0,
 		ClearTextOnFocus = false,
-		Font = Enum.Font.Gotham,
+		FontFace = Fonts.Mono,
 		PlaceholderText = options.Placeholder or "Type here...",
 		PlaceholderColor3 = Theme.FaintText,
 		Text = options.Default or "",
@@ -1081,7 +1329,7 @@ function SectionMethods:AddTextbox(options: any)
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border), padding(0, 11, 0, 11) }) :: TextBox
+	}, { corner(12), stroke(Theme.Border, 0.05), padding(0, 13, 0, 13) }) :: TextBox
 	local control = { Type = "Textbox", Value = textbox.Text, Instance = row }
 	function control:Set(value: string, silent: boolean?)
 		self.Value = tostring(value)
@@ -1102,19 +1350,20 @@ end
 function SectionMethods:AddKeybind(options: any)
 	options = options or {}
 	local text = options.Text or "Keybind"
-	local row = controlRow(self, 52, text, options.Description)
+	local row = controlRow(self, 62, text, options.Description)
 	local keyButton = button({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
-		Size = UDim2.fromOffset(82, 32),
+		Size = UDim2.fromOffset(96, 38),
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
 		Text = "",
 		Parent = row,
-	}, { corner(8), stroke(Theme.Border) })
+	}, { corner(11), stroke(Theme.Border, 0.05) })
 	local keyLabel = label({
 		Size = UDim2.fromScale(1, 1),
 		Text = "",
+		FontFace = Fonts.Mono,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Parent = keyButton,
