@@ -11,7 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
 KittenHub.__index = KittenHub
-KittenHub.Version = "0.5.1"
+KittenHub.Version = "0.5.2"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -767,7 +767,7 @@ function WindowMethods:Toggle(force: boolean?)
 	self.Gui.Enabled = self._visible
 end
 
-function WindowMethods:Notify(options: {[string]: any}?)
+function WindowMethods:NotifyShowcase(options: {[string]: any}?)
 	if self._destroyed then
 		return
 	end
@@ -943,6 +943,154 @@ function WindowMethods:Notify(options: {[string]: any}?)
 	tween(overlay, 0.22, { BackgroundTransparency = 0.1 })
 	tween(card, 0.3, { Position = UDim2.new(0.5, 0, 0.56, 0) })
 	tween(cardScale, 0.3, { Scale = targetScale })
+	task.delay(options.Duration or 4, dismiss)
+end
+
+function WindowMethods:Notify(options: {[string]: any}?)
+	if self._destroyed then
+		return
+	end
+	options = options or {}
+	local previousOverlay = self.Gui:FindFirstChild("NotificationOverlay")
+	if previousOverlay then
+		previousOverlay:Destroy()
+	end
+
+	local holder = self.Gui:FindFirstChild("Notifications") :: Frame?
+	if not holder then
+		holder = create("Frame", {
+			Name = "Notifications",
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -22, 1, -22),
+			Size = UDim2.fromOffset(330, 400),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ZIndex = 50,
+			Parent = self.Gui,
+		}, {
+			create("UIListLayout", {
+				VerticalAlignment = Enum.VerticalAlignment.Bottom,
+				Padding = UDim.new(0, 9),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}) :: UIListLayout,
+		}) :: Frame
+	end
+
+	local slot = create("Frame", {
+		Name = "NotificationSlot",
+		Size = UDim2.fromOffset(330, 86),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 51,
+		Parent = holder,
+	}) :: Frame
+	local notification = create("Frame", {
+		Name = "Notification",
+		Position = UDim2.fromOffset(38, 0),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Theme.Surface,
+		BorderSizePixel = 0,
+		ZIndex = 52,
+		Parent = slot,
+	}, {
+		corner(14),
+		stroke(Theme.Border, 0.04),
+		gradient(Color3.fromRGB(48, 49, 51), Color3.fromRGB(25, 26, 27), 105),
+	}) :: Frame
+	create("Frame", {
+		Name = "InnerBorder",
+		Position = UDim2.fromOffset(4, 4),
+		Size = UDim2.new(1, -8, 1, -8),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 53,
+		Parent = notification,
+	}, { corner(11), stroke(Theme.Border, 0.58) })
+	local iconTile = create("Frame", {
+		Name = "IconTile",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 0),
+		Size = UDim2.fromOffset(48, 48),
+		BackgroundColor3 = Theme.Selected,
+		BorderSizePixel = 0,
+		ZIndex = 54,
+		Parent = notification,
+	}, { corner(12), stroke(Theme.Border, 0.2) }) :: Frame
+	spriteOrGlyph(iconTile, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(38, 34),
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		TextSize = 20,
+		ZIndex = 55,
+	}, self.Assets, "Logo", "✦")
+	label({
+		Name = "Title",
+		Position = UDim2.fromOffset(72, 9),
+		Size = UDim2.new(1, -158, 0, 27),
+		FontFace = Fonts.Bold,
+		Text = options.Title or "KittenHub",
+		TextSize = 16,
+		ZIndex = 55,
+		Parent = notification,
+	})
+	label({
+		Name = "Content",
+		Position = UDim2.fromOffset(72, 36),
+		Size = UDim2.new(1, -158, 0, 39),
+		Text = options.Content or "Notification",
+		TextColor3 = Theme.MutedText,
+		TextSize = 12,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		ZIndex = 55,
+		Parent = notification,
+	})
+	spriteOrGlyph(notification, {
+		Name = "DarkCat",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -14, 0.5, 5),
+		Size = UDim2.fromOffset(66, 57),
+		ImageTransparency = 0.18,
+		TextTransparency = 0.35,
+		TextSize = 24,
+		ZIndex = 55,
+	}, self.Assets, "DarkCat", "=^.^=")
+	spriteOrGlyph(notification, {
+		Name = "Sparkles",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 6),
+		Size = UDim2.fromOffset(24, 19),
+		ImageTransparency = 0.18,
+		TextTransparency = 0.18,
+		TextSize = 13,
+		ZIndex = 56,
+	}, self.Assets, "Sparkles", "✧")
+	local dismissButton = button({
+		Name = "Dismiss",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Text = "",
+		ZIndex = 57,
+		Parent = notification,
+	})
+
+	local closing = false
+	local function dismiss()
+		if closing or not slot.Parent then
+			return
+		end
+		closing = true
+		tween(notification, 0.25, { Position = UDim2.fromOffset(350, 0) })
+		task.delay(0.27, function()
+			if slot.Parent then
+				slot:Destroy()
+			end
+		end)
+	end
+	table.insert(self._connections, dismissButton.MouseButton1Click:Connect(dismiss))
+	tween(notification, 0.3, { Position = UDim2.fromOffset(0, 0) })
 	task.delay(options.Duration or 4, dismiss)
 end
 

@@ -2,7 +2,7 @@
 
 KittenHub is an early-stage monochrome Roblox UI library inspired by the visual language of Project Real.
 
-The `0.5.1` visual refresh converts the Project Real / KittenHub reference into
+The `0.5.2` visual refresh converts the Project Real / KittenHub reference into
 Roblox-native UI: Fredoka One for playful display headings, Builder Sans for
 interface text, and Builder Mono for values, text inputs, and keybinds.
 
