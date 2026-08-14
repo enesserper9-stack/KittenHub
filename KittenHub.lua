@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.4"
+KittenHub.Version = "0.5.5"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -56,7 +56,9 @@ local Theme = {
 	Surface = Color3.fromRGB(24, 25, 26),
 	SurfaceHover = Color3.fromRGB(38, 39, 41),
 	Selected = Color3.fromRGB(51, 52, 55),
-	Border = Color3.fromRGB(76, 77, 81),
+	-- Borders read as a light tint at high transparency rather than a solid grey
+	-- line, which is what separates an inset hairline from a drawn outline.
+	Border = Color3.fromRGB(168, 170, 178),
 	Divider = Color3.fromRGB(57, 58, 61),
 	Text = Color3.fromRGB(244, 244, 245),
 	MutedText = Color3.fromRGB(188, 188, 194),
@@ -64,6 +66,9 @@ local Theme = {
 	Accent = Color3.fromRGB(255, 255, 255),
 	AccentSoft = Color3.fromRGB(222, 222, 226),
 	Track = Color3.fromRGB(61, 61, 65),
+	-- Only non-monochrome value in the theme: close is the one destructive
+	-- control, so its hover plate is the single place colour carries meaning.
+	Danger = Color3.fromRGB(196, 72, 78),
 	Shadow = Color3.fromRGB(0, 0, 0),
 	White = Color3.fromRGB(255, 255, 255),
 	Black = Color3.fromRGB(0, 0, 0),
@@ -92,17 +97,79 @@ local function create(className: string, properties: {[string]: any}?, children:
 	return object
 end
 
+-- Engine capabilities that are not present on every client. UIStroke's border
+-- positioning shipped 2025-12-04 and UIShadow 2026-06-23, so both are probed
+-- once instead of assumed.
+local Supports = {
+	InnerStroke = (function(): boolean
+		local ok = pcall(function()
+			local probe = Instance.new("UIStroke")
+			probe.BorderStrokePosition = Enum.BorderStrokePosition.Inner
+			probe:Destroy()
+		end)
+		return ok
+	end)(),
+	Shadow = (function(): boolean
+		local ok = pcall(function()
+			Instance.new("UIShadow"):Destroy()
+		end)
+		return ok
+	end)(),
+}
+
 local function corner(radius: number): UICorner
 	return create("UICorner", { CornerRadius = UDim.new(0, radius) }) :: UICorner
 end
 
-local function stroke(color: Color3?, transparency: number?): UIStroke
-	return create("UIStroke", {
-		Color = color or Theme.Border,
+-- Native drop shadow. Returns nil on clients without UIShadow so callers can
+-- fall back. Roblox recommends staying under 100 shadows on screen.
+local function dropShadow(parent: GuiObject, blur: number, spread: number, transparency: number, offsetY: number): Instance?
+	if not Supports.Shadow then
+		return nil
+	end
+	return create("UIShadow", {
+		BlurRadius = UDim.new(0, blur),
+		Spread = UDim2.fromOffset(spread, spread),
+		Offset = UDim2.fromOffset(0, offsetY),
+		Color = Theme.Shadow,
+		Transparency = transparency,
+		Parent = parent,
+	})
+end
+
+-- `lit` gives the stroke a top-to-bottom transparency ramp so the border catches
+-- light along the upper edge and fades out at the bottom. UIStroke only shows a
+-- child UIGradient's colour when its own Color is white, hence the swap.
+local function stroke(color: Color3?, transparency: number?, lit: boolean?): UIStroke
+	local base = color or Theme.Border
+	local alpha = transparency or 0
+	local instance = create("UIStroke", {
+		Color = lit and Theme.White or base,
 		Thickness = 1,
-		Transparency = transparency or 0,
+		Transparency = lit and 0 or alpha,
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 	}) :: UIStroke
+
+	-- Default BorderStrokePosition is Outer, which draws the hairline outside the
+	-- rounded shape and reads as a hard outline instead of an inset edge.
+	if Supports.InnerStroke then
+		instance.BorderStrokePosition = Enum.BorderStrokePosition.Inner
+	end
+
+	if lit then
+		create("UIGradient", {
+			Rotation = 90,
+			Color = ColorSequence.new(base, base),
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, alpha),
+				NumberSequenceKeypoint.new(0.55, math.clamp(alpha + 0.18, 0, 1)),
+				NumberSequenceKeypoint.new(1, math.clamp(alpha + 0.3, 0, 1)),
+			}),
+			Parent = instance,
+		})
+	end
+
+	return instance
 end
 
 local function padding(top: number, right: number, bottom: number, left: number): UIPadding
@@ -549,16 +616,22 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = getParent(),
 	}) :: ScreenGui
 
-	local shadow = create("Frame", {
-		Name = "WindowShadow",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(0.5, 0, 0.5, 8),
-		Size = UDim2.fromOffset(baseSize.X + 18, baseSize.Y + 18),
-		BackgroundColor3 = Theme.Shadow,
-		BackgroundTransparency = 0.48,
-		BorderSizePixel = 0,
-		Parent = screenGui,
-	}, { corner(24) }) :: Frame
+	-- Without native UIShadow the fallback is a hard-edged rounded rectangle
+	-- behind the window, which reads as a grey slab rather than a shadow. Only
+	-- create it when the engine cannot draw a real one.
+	local shadow: Frame? = nil
+	if not Supports.Shadow then
+		shadow = create("Frame", {
+			Name = "WindowShadow",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, 0.5, 8),
+			Size = UDim2.fromOffset(baseSize.X + 18, baseSize.Y + 18),
+			BackgroundColor3 = Theme.Shadow,
+			BackgroundTransparency = 0.6,
+			BorderSizePixel = 0,
+			Parent = screenGui,
+		}, { corner(24) }) :: Frame
+	end
 
 	local root = create("Frame", {
 		Name = "Window",
@@ -571,9 +644,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = screenGui,
 	}, {
 		corner(18),
-		stroke(Theme.Border, 0.1),
+		stroke(Theme.Border, 0.74, true),
 		gradient(Color3.fromRGB(12, 13, 13), Color3.fromRGB(7, 8, 8), 115),
 	}) :: Frame
+	dropShadow(root, 54, 6, 0.34, 14)
 	addSoftPattern(root, assets)
 
 	local uiScale = create("UIScale", { Scale = 1, Parent = root }) :: UIScale
@@ -656,33 +730,76 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = windowControls,
 	})
 
-	local minimize = button({
-		Name = "Minimize",
-		Size = UDim2.fromOffset(40, 40),
-		Text = "—",
-		TextColor3 = Theme.MutedText,
-		TextSize = 18,
-		LayoutOrder = 1,
-		Parent = windowControls,
-	})
-	local maximize = button({
-		Name = "Center",
-		Size = UDim2.fromOffset(40, 40),
-		Text = "□",
-		TextColor3 = Theme.MutedText,
-		TextSize = 17,
-		LayoutOrder = 2,
-		Parent = windowControls,
-	})
-	local close = button({
-		Name = "Close",
-		Size = UDim2.fromOffset(40, 40),
-		Text = "×",
-		TextColor3 = Theme.MutedText,
-		TextSize = 24,
-		LayoutOrder = 3,
-		Parent = windowControls,
-	})
+	-- Window controls are drawn from primitives instead of "—", "□" and "×" text
+	-- glyphs: font glyphs sit on different baselines, so the three never lined up
+	-- and their weights did not match. Each is a hit target with a hover plate
+	-- behind a hairline-thin icon.
+	local minimize, maximize, close
+	local controlParts: {{ Plate: Frame, Icon: Frame, Danger: boolean }} = {}
+	do
+		local function controlButton(name: string, order: number, danger: boolean?)
+			local hit = button({
+				Name = name,
+				Size = UDim2.fromOffset(34, 34),
+				BackgroundTransparency = 1,
+				Text = "",
+				LayoutOrder = order,
+				Parent = windowControls,
+			}, { corner(10) })
+
+			local plate = create("Frame", {
+				Name = "Plate",
+				Size = UDim2.fromScale(1, 1),
+				BackgroundColor3 = danger and Theme.Danger or Theme.SurfaceHover,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Parent = hit,
+			}, { corner(10) }) :: Frame
+
+			local icon = create("Frame", {
+				Name = "Icon",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.fromOffset(12, 12),
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Parent = hit,
+			}) :: Frame
+
+			table.insert(controlParts, { Plate = plate, Icon = icon, Danger = danger == true })
+			return hit, plate, icon
+		end
+
+		local function bar(parent: Instance, position: UDim2, size: UDim2, rotation: number?)
+			return create("Frame", {
+				Position = position,
+				Size = size,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Rotation = rotation or 0,
+				BackgroundColor3 = Theme.MutedText,
+				BorderSizePixel = 0,
+				Parent = parent,
+			}, { corner(1) }) :: Frame
+		end
+
+		local minimizeIcon, maximizeIcon, closeIcon
+		minimize, _, minimizeIcon = controlButton("Minimize", 1)
+		bar(minimizeIcon, UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(12, 2))
+
+		maximize, _, maximizeIcon = controlButton("Center", 2)
+		create("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(11, 11),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Parent = maximizeIcon,
+		}, { corner(3), stroke(Theme.MutedText, 0) })
+
+		close, _, closeIcon = controlButton("Close", 3, true)
+		bar(closeIcon, UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(13, 2), 45)
+		bar(closeIcon, UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(13, 2), -45)
+	end
 
 	local sidebar = create("Frame", {
 		Name = "Sidebar",
@@ -693,9 +810,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = root,
 	}, {
 		corner(20),
-		stroke(Theme.Border, 0.72),
-		gradient(Color3.fromRGB(27, 27, 29), Color3.fromRGB(13, 14, 15), 110),
+		stroke(Theme.Border, 0.8, true),
+		gradient(Color3.fromRGB(23, 24, 26), Color3.fromRGB(16, 17, 18), 110),
 	}) :: Frame
+	dropShadow(sidebar, 26, 0, 0.55, 8)
 	dashedBorder(sidebar, 20)
 	addSoftPattern(sidebar, assets)
 	spriteOrGlyph(root, {
@@ -740,8 +858,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		BackgroundColor3 = Theme.SurfaceHover,
 		BorderSizePixel = 0,
 		Parent = sidebar,
-	}, { corner(17), stroke(Theme.Border, 0.78) }) :: Frame
+	}, { corner(17), stroke(Theme.Border, 0.82, true) }) :: Frame
+	dropShadow(footer, 16, 0, 0.6, 5)
 	dashedBorder(footer, 17)
+
 
 	spriteOrGlyph(footer, {
 		Name = "Avatar",
@@ -791,9 +911,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = root,
 	}, {
 		corner(20),
-		stroke(Theme.Border, 0.72),
-		gradient(Color3.fromRGB(27, 28, 29), Color3.fromRGB(11, 12, 12), 105),
+		stroke(Theme.Border, 0.8, true),
+		gradient(Color3.fromRGB(23, 24, 26), Color3.fromRGB(15, 16, 17), 105),
 	}) :: Frame
+	dropShadow(content, 26, 0, 0.55, 8)
 	dashedBorder(content, 20)
 	addSoftPattern(content, assets)
 	local contentFooterLine = dashedLine(content, baseSize.Y - 120, 0, 0, 900)
@@ -898,21 +1019,55 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		end))
 	end
 
+	-- Collapsing only shrank the window frame, so the sidebar, the content panel
+	-- and the root decorations kept rendering inside a 76px strip: the page title
+	-- bled through the top bar and the bottom-right paw jumped up into it.
+	-- Everything below the top bar is hidden for the duration instead.
+	local collapsibles: {GuiObject} = { sidebar, content }
+	for _, child in ipairs(root:GetChildren()) do
+		if child:IsA("GuiObject") and child ~= topbar and child ~= sidebar and child ~= content then
+			table.insert(collapsibles, child)
+		end
+	end
+
+	local collapseToken = 0
 	table.insert(window._connections, minimize.MouseButton1Click:Connect(function()
 		window:ClosePopups()
 		window._minimized = not window._minimized
-		if window._minimized then
-			tween(root, 0.25, { Size = UDim2.fromOffset(baseSize.X, 76) })
-			shadow.Visible = false
-		else
-			tween(root, 0.25, { Size = UDim2.fromOffset(baseSize.X, baseSize.Y) })
-			shadow.Visible = true
+		local minimized = window._minimized
+		collapseToken += 1
+		local token = collapseToken
+
+		if minimized then
+			for _, element in ipairs(collapsibles) do
+				element.Visible = false
+			end
+		end
+		tween(root, 0.25, {
+			Size = UDim2.fromOffset(baseSize.X, minimized and 76 or baseSize.Y),
+		})
+		if not minimized then
+			-- Wait for the frame to be tall enough again before revealing, so the
+			-- panels do not pop in against a clipped window.
+			task.delay(0.18, function()
+				if token ~= collapseToken or window._destroyed then
+					return
+				end
+				for _, element in ipairs(collapsibles) do
+					element.Visible = true
+				end
+			end)
+		end
+		if shadow then
+			shadow.Visible = not minimized
 		end
 	end))
 
 	table.insert(window._connections, maximize.MouseButton1Click:Connect(function()
 		root.Position = UDim2.fromScale(0.5, 0.5)
-		shadow.Position = UDim2.new(0.5, 0, 0.5, 8)
+		if shadow then
+			shadow.Position = UDim2.new(0.5, 0, 0.5, 8)
+		end
 		updateResponsiveScale(window)
 	end))
 
@@ -920,12 +1075,26 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		window:Destroy()
 	end))
 
-	for _, control in ipairs({ minimize, maximize, close }) do
+	for index, control in ipairs({ minimize, maximize, close }) do
+		local parts = controlParts[index]
+		local function paint(hovered: boolean)
+			tween(parts.Plate, 0.14, { BackgroundTransparency = hovered and 0.12 or 1 })
+			local tint = hovered and (parts.Danger and Theme.White or Theme.Text) or Theme.MutedText
+			for _, piece in ipairs(parts.Icon:GetChildren()) do
+				if piece:IsA("Frame") then
+					tween(piece, 0.14, { BackgroundColor3 = tint })
+					local pieceStroke = piece:FindFirstChildOfClass("UIStroke")
+					if pieceStroke then
+						tween(pieceStroke, 0.14, { Color = tint })
+					end
+				end
+			end
+		end
 		table.insert(window._connections, control.MouseEnter:Connect(function()
-			control.TextColor3 = Theme.Text
+			paint(true)
 		end))
 		table.insert(window._connections, control.MouseLeave:Connect(function()
-			control.TextColor3 = Theme.MutedText
+			paint(false)
 		end))
 	end
 
@@ -1014,8 +1183,8 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		Parent = slot,
 	}, {
 		corner(14),
-		stroke(Theme.Border, 0.04),
-		gradient(Color3.fromRGB(48, 49, 51), Color3.fromRGB(25, 26, 27), 105),
+		stroke(Theme.Border, 0.76, true),
+		gradient(Color3.fromRGB(38, 39, 42), Color3.fromRGB(24, 25, 27), 105),
 	}) :: Frame
 	create("Frame", {
 		Name = "InnerBorder",
@@ -1025,7 +1194,7 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		BorderSizePixel = 0,
 		ZIndex = 53,
 		Parent = notification,
-	}, { corner(11), stroke(Theme.Border, 0.58) })
+	}, { corner(11), stroke(Theme.Border, 0.9) })
 	local iconTile = create("Frame", {
 		Name = "IconTile",
 		AnchorPoint = Vector2.new(0, 0.5),
@@ -1035,7 +1204,7 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		BorderSizePixel = 0,
 		ZIndex = 54,
 		Parent = notification,
-	}, { corner(12), stroke(Theme.Border, 0.2) }) :: Frame
+	}, { corner(12), stroke(Theme.Border, 0.8, true) }) :: Frame
 	spriteOrGlyph(iconTile, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -1149,7 +1318,7 @@ function WindowMethods:AddTab(options: any)
 	}, {
 		corner(14),
 		tabStroke,
-		gradient(Color3.fromRGB(52, 52, 55), Color3.fromRGB(32, 32, 35), 100),
+		gradient(Color3.fromRGB(46, 47, 50), Color3.fromRGB(31, 32, 35), 100),
 	})
 
 	local tabIconImage = if type(tabIcon) == "string" and string.find(tabIcon, "rbxasset", 1, true) == 1
@@ -1278,7 +1447,7 @@ function WindowMethods:SelectTab(tab: any)
 		item.Page.Visible = selected
 		tween(item.Button, 0.18, { BackgroundTransparency = selected and 0 or 1 })
 		if item.Stroke then
-			tween(item.Stroke, 0.18, { Transparency = selected and 0.08 or 1 })
+			tween(item.Stroke, 0.18, { Transparency = selected and 0.76 or 1 })
 		end
 		local icon = item.Button:FindFirstChild("Icon")
 		if icon and icon:IsA("TextLabel") then
@@ -1359,10 +1528,10 @@ function TabMethods:AddSection(options: any)
 		Parent = wrapper,
 	}, {
 		corner(22),
-		stroke(Theme.Border, 0.05),
+		stroke(Theme.Border, 0.84, true),
 		padding(8, 18, 8, 18),
 		listLayout(0),
-		gradient(Color3.fromRGB(45, 46, 48), Color3.fromRGB(24, 25, 26), 105),
+		gradient(Color3.fromRGB(31, 32, 34), Color3.fromRGB(22, 23, 25), 105),
 	}) :: Frame
 
 	local section = setmetatable({
@@ -1412,7 +1581,7 @@ local function controlRow(section: any, height: number, title: string, descripti
 		BackgroundColor3 = Theme.Selected,
 		BorderSizePixel = 0,
 		Parent = row,
-	}, { corner(14), stroke(Theme.Border, 0.12) }) :: Frame
+	}, { corner(14), stroke(Theme.Border, 0.82, true) }) :: Frame
 	spriteOrGlyph(iconTile, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -1484,7 +1653,7 @@ function SectionMethods:AddButton(options: any)
 		Parent = row,
 	}, {
 		corner(12),
-		stroke(Theme.Border, 0.05),
+		stroke(Theme.Border, 0.84, true),
 	})
 	local actionSurface = create("Frame", {
 		Name = "Surface",
@@ -1495,7 +1664,7 @@ function SectionMethods:AddButton(options: any)
 		Parent = action,
 	}, {
 		corner(12),
-		gradient(Color3.fromRGB(82, 82, 85), Color3.fromRGB(46, 46, 49), 105),
+		gradient(Color3.fromRGB(62, 63, 67), Color3.fromRGB(40, 41, 44), 105),
 	}) :: Frame
 	create("Frame", {
 		Name = "InnerBorder",
@@ -1505,7 +1674,7 @@ function SectionMethods:AddButton(options: any)
 		BorderSizePixel = 0,
 		ZIndex = action.ZIndex + 1,
 		Parent = action,
-	}, { corner(9), stroke(Theme.Border, 0.5) })
+	}, { corner(9), stroke(Theme.Border, 0.9) })
 	spriteOrGlyph(action, {
 		Name = "ButtonKitten",
 		AnchorPoint = Vector2.new(0, 0.5),
@@ -1554,7 +1723,7 @@ function SectionMethods:AddToggle(options: any)
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
 		Parent = row,
-	}, { corner(21), stroke(Theme.Border, 0.05) })
+	}, { corner(21), stroke(Theme.Border, 0.8, true) })
 	local knob = create("Frame", {
 		AnchorPoint = Vector2.new(0, 0.5),
 		Position = UDim2.new(0, 4, 0.5, 0),
@@ -1716,8 +1885,8 @@ function SectionMethods:AddDropdown(options: any)
 		Parent = row,
 	}, {
 		corner(12),
-		stroke(Theme.Border, 0.05),
-		gradient(Color3.fromRGB(72, 72, 75), Color3.fromRGB(43, 43, 46), 105),
+		stroke(Theme.Border, 0.84, true),
+		gradient(Color3.fromRGB(56, 57, 61), Color3.fromRGB(36, 37, 40), 105),
 	})
 	local valueText = label({
 		Position = UDim2.fromOffset(18, 0),
@@ -1775,10 +1944,10 @@ function SectionMethods:AddDropdown(options: any)
 	}, {
 		listScale,
 		corner(12),
-		stroke(Theme.Border, 0.02),
+		stroke(Theme.Border, 0.76, true),
 		padding(7, 7, 7, 7),
 		listLayout(3),
-		gradient(Color3.fromRGB(58, 59, 62), Color3.fromRGB(34, 35, 37), 105),
+		gradient(Color3.fromRGB(50, 51, 55), Color3.fromRGB(32, 33, 36), 105),
 	}) :: Frame
 	local control = { Type = "Dropdown", Value = options.Default or values[1], Values = values, Instance = row }
 	local window = self.Window
@@ -1935,7 +2104,7 @@ function SectionMethods:AddTextbox(options: any)
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
-	}, { corner(12), stroke(Theme.Border, 0.05), padding(0, 13, 0, 13) }) :: TextBox
+	}, { corner(12), stroke(Theme.Border, 0.84, true), padding(0, 13, 0, 13) }) :: TextBox
 	local control = { Type = "Textbox", Value = textbox.Text, Instance = row }
 	function control:Set(value: string, silent: boolean?)
 		self.Value = tostring(value)
@@ -1965,7 +2134,7 @@ function SectionMethods:AddKeybind(options: any)
 		BackgroundTransparency = 0,
 		Text = "",
 		Parent = row,
-	}, { corner(11), stroke(Theme.Border, 0.05) })
+	}, { corner(11), stroke(Theme.Border, 0.8, true) })
 	local keyLabel = label({
 		Size = UDim2.fromScale(1, 1),
 		Text = "",

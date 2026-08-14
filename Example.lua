@@ -35,7 +35,7 @@ assert(loader, "KittenHub derlenemedi: " .. tostring(compileError))
 local KittenHub = loader()
 assert(type(KittenHub) == "table", "KittenHub yukleyicisi tablo yerine " .. typeof(KittenHub) .. " dondurdu")
 assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulunamadi; GitHub dosyasi eski veya eksik")
-local EXPECTED_VERSION = "0.5.4"
+local EXPECTED_VERSION = "0.5.5"
 assert(
 	KittenHub.Version == EXPECTED_VERSION,
 	"GitHub eski KittenHub surumunu dondurdu. Beklenen: "
