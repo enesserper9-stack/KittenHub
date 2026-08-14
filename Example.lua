@@ -1,6 +1,6 @@
 -- KittenHub example / visual test
 
-local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=9"
+local LIBRARY_URL = "https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua?v=10"
 local source = game:HttpGet(LIBRARY_URL, true)
 local loader, compileError = loadstring(source)
 

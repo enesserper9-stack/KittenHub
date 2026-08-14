@@ -11,7 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
 KittenHub.__index = KittenHub
-KittenHub.Version = "0.5.0"
+KittenHub.Version = "0.5.1"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -772,57 +772,178 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		return
 	end
 	options = options or {}
-	local holder = self.Gui:FindFirstChild("Notifications") :: Frame?
-	if not holder then
-		holder = create("Frame", {
-			Name = "Notifications",
-			AnchorPoint = Vector2.new(1, 1),
-			Position = UDim2.new(1, -22, 1, -22),
-			Size = UDim2.fromOffset(330, 400),
-			BackgroundTransparency = 1,
-			Parent = self.Gui,
-		}, {
-			create("UIListLayout", {
-				VerticalAlignment = Enum.VerticalAlignment.Bottom,
-				Padding = UDim.new(0, 8),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-			}) :: UIListLayout,
-		}) :: Frame
+	local previous = self.Gui:FindFirstChild("NotificationOverlay")
+	if previous then
+		previous:Destroy()
 	end
 
-	local notification = create("Frame", {
-		Size = UDim2.fromOffset(330, 86),
-		BackgroundColor3 = Theme.Surface,
-		BackgroundTransparency = 0.03,
+	local overlay = create("Frame", {
+		Name = "NotificationOverlay",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(96, 93, 96),
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		Parent = holder,
-	}, { corner(10), stroke(Theme.Border, 0.15), padding(13, 15, 13, 15) }) :: Frame
-	label({
-		Size = UDim2.new(1, 0, 0, 24),
-		FontFace = Fonts.Bold,
-		Text = options.Title or "KittenHub",
-		TextSize = 15,
-		Parent = notification,
+		ZIndex = 100,
+		Parent = self.Gui,
+	}) :: Frame
+	local dismissButton = button({
+		Name = "Dismiss",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Text = "",
+		ZIndex = 101,
+		Parent = overlay,
 	})
+
+	local patternMarks = {
+		{ 0.08, 0.12, 76, 0.88 }, { 0.33, 0.08, 64, 0.9 }, { 0.62, 0.12, 78, 0.9 },
+		{ 0.9, 0.14, 62, 0.9 }, { 0.11, 0.88, 70, 0.9 }, { 0.78, 0.88, 68, 0.91 },
+	}
+	for index, mark in ipairs(patternMarks) do
+		local decoration = spriteOrGlyph(overlay, {
+			Name = "OverlayPattern" .. index,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(mark[1], mark[2]),
+			Size = UDim2.fromOffset(mark[3], mark[3]),
+			ImageTransparency = mark[4],
+			ImageColor3 = Color3.fromRGB(66, 64, 68),
+			TextTransparency = mark[4],
+			TextSize = math.floor(mark[3] * 0.5),
+			ZIndex = 101,
+		}, self.Assets, index % 3 == 0 and "Heart" or "Paw", "✦")
+		decoration.Rotation = index % 2 == 0 and 12 or -12
+	end
+
+	local cardSize = Vector2.new(1040, 360)
+	local camera = workspace.CurrentCamera
+	local viewport = camera and camera.ViewportSize or Vector2.new(1280, 760)
+	local targetScale = math.clamp(math.min((viewport.X - 70) / cardSize.X, (viewport.Y - 70) / cardSize.Y), 0.55, 1)
+	local shadow = create("Frame", {
+		Name = "CardShadow",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.56, 14),
+		Size = UDim2.fromOffset(cardSize.X * targetScale + 22, cardSize.Y * targetScale + 22),
+		BackgroundColor3 = Theme.Black,
+		BackgroundTransparency = 0.35,
+		BorderSizePixel = 0,
+		ZIndex = 102,
+		Parent = overlay,
+	}, { corner(30) }) :: Frame
+	local card = create("Frame", {
+		Name = "NotificationCard",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.56, 24),
+		Size = UDim2.fromOffset(cardSize.X, cardSize.Y),
+		BackgroundColor3 = Theme.Surface,
+		BorderSizePixel = 0,
+		ZIndex = 103,
+		Parent = overlay,
+	}, {
+		corner(28),
+		stroke(Color3.fromRGB(72, 72, 76), 0.03),
+		gradient(Color3.fromRGB(34, 35, 36), Color3.fromRGB(15, 16, 17), 108),
+	}) :: Frame
+	local cardScale = create("UIScale", { Scale = targetScale * 0.9, Parent = card }) :: UIScale
+	create("Frame", {
+		Name = "InnerBorder",
+		Position = UDim2.fromOffset(16, 16),
+		Size = UDim2.new(1, -32, 1, -32),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 104,
+		Parent = card,
+	}, { corner(22), stroke(Theme.Border, 0.48) })
+
+	spriteOrGlyph(card, {
+		Name = "PeekKitten",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.fromOffset(118, 30),
+		Size = UDim2.fromOffset(210, 148),
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		TextSize = 38,
+		ZIndex = 106,
+	}, self.Assets, "Peek", "^ᴗ^")
 	label({
-		Position = UDim2.fromOffset(0, 27),
-		Size = UDim2.new(1, 0, 0, 34),
+		Name = "Title",
+		Position = UDim2.fromOffset(92, 76),
+		Size = UDim2.new(1, -430, 0, 70),
+		FontFace = Fonts.Display,
+		Text = options.Title or "KittenHub",
+		TextSize = 48,
+		ZIndex = 105,
+		Parent = card,
+	})
+	spriteOrGlyph(card, {
+		Position = UDim2.fromOffset(394, 90),
+		Size = UDim2.fromOffset(48, 48),
+		ImageTransparency = 0.12,
+		TextTransparency = 0.12,
+		TextSize = 28,
+		ZIndex = 105,
+	}, self.Assets, "Paw", "✦")
+	label({
+		Name = "Content",
+		Position = UDim2.fromOffset(92, 158),
+		Size = UDim2.new(1, -430, 0, 86),
 		Text = options.Content or "Notification",
 		TextColor3 = Theme.MutedText,
-		TextSize = 13,
+		TextSize = 27,
 		TextWrapped = true,
 		TextYAlignment = Enum.TextYAlignment.Top,
-		Parent = notification,
+		ZIndex = 105,
+		Parent = card,
 	})
-	notification.Position = UDim2.fromOffset(30, 0)
-	tween(notification, 0.32, { Position = UDim2.fromOffset(0, 0) })
-	task.delay(options.Duration or 4, function()
-		if notification.Parent then
-			tween(notification, 0.25, { BackgroundTransparency = 1 })
-			task.wait(0.28)
-			notification:Destroy()
+	spriteOrGlyph(card, {
+		Name = "DarkCat",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -76, 1, -38),
+		Size = UDim2.fromOffset(250, 214),
+		ImageTransparency = 0.32,
+		TextTransparency = 0.5,
+		TextSize = 54,
+		ZIndex = 105,
+	}, self.Assets, "DarkCat", "=^.^=")
+	spriteOrGlyph(card, {
+		Name = "Sparkles",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -38, 0, 36),
+		Size = UDim2.fromOffset(84, 66),
+		ImageTransparency = 0.02,
+		TextTransparency = 0.02,
+		TextSize = 38,
+		ZIndex = 106,
+	}, self.Assets, "Sparkles", "✧")
+	spriteOrGlyph(card, {
+		Name = "Heart",
+		Position = UDim2.new(0, 58, 1, -78),
+		Size = UDim2.fromOffset(44, 44),
+		ImageTransparency = 0,
+		TextTransparency = 0,
+		TextSize = 30,
+		ZIndex = 106,
+	}, self.Assets, "Heart", "♥")
+
+	local closing = false
+	local function dismiss()
+		if closing or not overlay.Parent then
+			return
 		end
-	end)
+		closing = true
+		tween(overlay, 0.24, { BackgroundTransparency = 1 })
+		tween(card, 0.24, { Position = UDim2.new(0.5, 0, 0.56, 26) })
+		tween(cardScale, 0.24, { Scale = targetScale * 0.94 })
+		task.delay(0.26, function()
+			if overlay.Parent then
+				overlay:Destroy()
+			end
+		end)
+	end
+	table.insert(self._connections, dismissButton.MouseButton1Click:Connect(dismiss))
+	tween(overlay, 0.22, { BackgroundTransparency = 0.1 })
+	tween(card, 0.3, { Position = UDim2.new(0.5, 0, 0.56, 0) })
+	tween(cardScale, 0.3, { Scale = targetScale })
+	task.delay(options.Duration or 4, dismiss)
 end
 
 function WindowMethods:AddTab(options: any)
@@ -1162,18 +1283,34 @@ function SectionMethods:AddButton(options: any)
 	local action = button({
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -5, 0.5, 0),
-		Size = UDim2.fromOffset(166, 50),
-		BackgroundColor3 = Theme.Selected,
-		BackgroundTransparency = 0,
-		Text = options.ButtonText or "Run",
-		TextColor3 = Theme.Text,
-		TextSize = 16,
+		Size = UDim2.fromOffset(166, 54),
+		BackgroundTransparency = 1,
+		Text = "",
 		Parent = row,
 	}, {
 		corner(12),
 		stroke(Theme.Border, 0.05),
-		gradient(Color3.fromRGB(76, 76, 79), Color3.fromRGB(44, 44, 47), 105),
 	})
+	local actionSurface = create("Frame", {
+		Name = "Surface",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Theme.Selected,
+		BorderSizePixel = 0,
+		ZIndex = action.ZIndex,
+		Parent = action,
+	}, {
+		corner(12),
+		gradient(Color3.fromRGB(82, 82, 85), Color3.fromRGB(46, 46, 49), 105),
+	}) :: Frame
+	create("Frame", {
+		Name = "InnerBorder",
+		Position = UDim2.fromOffset(4, 4),
+		Size = UDim2.new(1, -8, 1, -8),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = action.ZIndex + 1,
+		Parent = action,
+	}, { corner(9), stroke(Theme.Border, 0.5) })
 	spriteOrGlyph(action, {
 		Name = "ButtonKitten",
 		AnchorPoint = Vector2.new(0, 0.5),
@@ -1182,12 +1319,24 @@ function SectionMethods:AddButton(options: any)
 		ImageTransparency = 0,
 		TextTransparency = 0,
 		TextSize = 18,
+		ZIndex = action.ZIndex + 2,
 	}, self.Window.Assets, "Logo", "✦")
+	label({
+		Name = "ButtonText",
+		Position = UDim2.fromOffset(58, 0),
+		Size = UDim2.new(1, -70, 1, 0),
+		FontFace = Fonts.Semibold,
+		Text = options.ButtonText or "Run",
+		TextColor3 = Theme.Text,
+		TextSize = 17,
+		ZIndex = action.ZIndex + 2,
+		Parent = action,
+	})
 	table.insert(self.Window._connections, action.MouseEnter:Connect(function()
-		tween(action, 0.15, { BackgroundColor3 = Theme.SurfaceHover })
+		tween(actionSurface, 0.15, { BackgroundTransparency = 0.12 })
 	end))
 	table.insert(self.Window._connections, action.MouseLeave:Connect(function()
-		tween(action, 0.15, { BackgroundColor3 = Theme.Selected })
+		tween(actionSurface, 0.15, { BackgroundTransparency = 0 })
 	end))
 	table.insert(self.Window._connections, action.MouseButton1Click:Connect(function()
 		safeCallback(options.Callback)
