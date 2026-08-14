@@ -310,6 +310,30 @@ local function dashedBorder(frame: GuiObject, radius: number, transparency: numb
 	return holder
 end
 
+-- One PreloadAsync per icon opened ~60 separate requests, and ContentProvider
+-- starved the ones queued last: the final tab's rows never resolved. Everything
+-- created in the same frame is fetched as a single batched request instead.
+local preloadQueue: {Instance} = {}
+local preloadRunning = false
+
+local function queuePreload(instance: Instance)
+	table.insert(preloadQueue, instance)
+	if preloadRunning then
+		return
+	end
+	preloadRunning = true
+	task.defer(function()
+		while #preloadQueue > 0 do
+			local batch = preloadQueue
+			preloadQueue = {}
+			pcall(function()
+				ContentProvider:PreloadAsync(batch)
+			end)
+		end
+		preloadRunning = false
+	end)
+end
+
 local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any}, imageId: string?, glyph: string): GuiObject
 	-- Work on a copy: the branches below strip keys, and mutating the caller's
 	-- table breaks any table that is reused for a second element.
@@ -351,24 +375,31 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		properties.Parent = parent
 		local image = create("ImageLabel", properties) :: ImageLabel
 		local fallback = create("TextLabel", fallbackProperties) :: TextLabel
-		local warned = false
+
+		-- Driven purely by IsLoaded and evaluated up front. The previous version
+		-- only ran this after PreloadAsync returned, so while that call was
+		-- throttled the image stayed visible-but-empty and the glyph stayed
+		-- hidden, leaving a blank tile with no fallback.
 		local function updateLoadedState()
 			if not image.Parent or not fallback.Parent then
 				return
 			end
-			image.Visible = image.IsLoaded
-			fallback.Visible = not image.IsLoaded
-			if not image.IsLoaded and not warned then
-				warned = true
-				warn("[KittenHub] Image asset could not be loaded:", imageId, "Check moderation and Asset Privacy/Open Use permissions.")
-			end
+			local loaded = image.IsLoaded
+			image.Visible = loaded
+			fallback.Visible = not loaded
 		end
 		image:GetPropertyChangedSignal("IsLoaded"):Connect(updateLoadedState)
-		task.spawn(function()
-			pcall(function()
-				ContentProvider:PreloadAsync({ image })
-			end)
-			updateLoadedState()
+		updateLoadedState()
+		queuePreload(image)
+
+		task.delay(10, function()
+			if image.Parent and not image.IsLoaded then
+				warn(
+					"[KittenHub] Image asset still not loaded after 10s:",
+					imageId,
+					"Check moderation and Asset Privacy/Open Use permissions."
+				)
+			end
 		end)
 		return image
 	end
