@@ -1,11 +1,12 @@
 -- KittenHub example / visual test
 
-local KittenHub = loadstring(game:HttpGet("https://raw.githubusercontent.com/enesserper9-stack/KittenHub/main/KittenHub.lua"))()
+local KittenHub = loadstring(game:HttpGet("YOUR_RAW_KITTENHUB_URL_HERE"))()
 
 local Window = KittenHub:CreateWindow({
 	Title = "KittenHub",
 	Icon = "rbxassetid://89700767026016",
 	Size = Vector2.new(1248, 687),
+	Scale = 0.8,
 	PageTitle = "Home",
 	ToggleKey = Enum.KeyCode.RightShift,
 })
