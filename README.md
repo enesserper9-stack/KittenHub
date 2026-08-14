@@ -2,7 +2,7 @@
 
 KittenHub is an early-stage monochrome Roblox UI library inspired by the visual language of Project Real.
 
-The `0.2.0` visual refresh converts the Project Real / KittenHub reference into
+The `0.2.1` visual refresh converts the Project Real / KittenHub reference into
 Roblox-native UI: Fredoka One for playful display headings, Builder Sans for
 interface text, and Builder Mono for values, text inputs, and keybinds.
 
@@ -13,7 +13,7 @@ interface text, and Builder Mono for values, text inputs, and keybinds.
 - Separate floating sidebar and content panels
 - Layered near-black gradients, restrained borders, soft shadow, and decorative pattern layer
 - Responsive `UIScale` for smaller viewports
-- Asset: `rbxassetid://89700767026016`
+- Logo texture: `rbxassetid://102065448126548`
 - Clean top bar without decorative navigation icons
 - Near-black layered surfaces with restrained borders and tighter corner radii
 - Fredoka One display headings, Builder Sans body text, and Builder Mono technical controls
@@ -27,42 +27,42 @@ interface text, and Builder Mono for values, text inputs, and keybinds.
 
 - `KittenHub.lua` — library source
 - `Example.lua` — temporary visual/API test
-- `assets/kitten-sprites.png` — transparent 3×2 decoration sprite sheet
+- `assets/separate/*.png` — six transparent decorations, uploaded separately
 
-Upload `assets/kitten-sprites.png` through Roblox Studio's Asset Manager, copy
-the resulting image asset ID, and set `Assets.SpriteSheet`. KittenHub uses
-predefined `ImageRectOffset`/`ImageRectSize` rectangles to render all six
-decorations from that single uploaded image.
+Upload every PNG in `assets/separate` through Roblox Studio's Asset Manager.
+Copy each image dependency/texture ID into the matching `Assets` entry. Every
+decoration uses its own image ID; KittenHub no longer uses a sprite sheet or
+`ImageRectOffset`/`ImageRectSize`.
 
 ### If the sprites appear blank
 
 1. Wait until the image thumbnail is visible and moderation has completed.
 2. In Creator Dashboard, open the image's **Permissions / Asset Access** page.
 3. If testing inside an experience you don't own, set the image to **Open Use**.
-4. Use the image dependency/texture ID, not the parent asset/decal ID. For this
-   sheet the correct value is `rbxassetid://73389330357206`.
+4. Use each upload's image dependency/texture ID, not its parent asset/decal ID.
 
 KittenHub preloads the sheet and prints a warning in the Developer Console when
 Roblox denies or fails to load it. A glyph fallback is displayed instead of an
 empty square.
 
-`Example.lua` contains a placeholder URL. Replace `YOUR_RAW_KITTENHUB_URL_HERE` after the library is uploaded to a raw file host or GitHub repository.
+`Example.lua` loads the library from the KittenHub GitHub repository. Push the
+updated `KittenHub.lua` before testing that raw URL.
 
 ## Example API
 
 ```lua
 local Window = KittenHub:CreateWindow({
     Title = "KittenHub",
-    Icon = "rbxassetid://89700767026016",
+    Icon = "rbxassetid://102065448126548",
     Size = Vector2.new(1280, 760),
     Scale = 0.78,
     Assets = {
-		SpriteSheet = "rbxassetid://73389330357206",
-        Logo = "rbxassetid://89700767026016",
-        RowIcon = "rbxassetid://89700767026016",
-        -- Paw = "rbxassetid://YOUR_PAW_ASSET",
-        -- Heart = "rbxassetid://YOUR_HEART_ASSET",
-        -- CornerCat = "rbxassetid://YOUR_CORNER_CAT_ASSET",
+        Logo = "rbxassetid://102065448126548",
+        Paw = "rbxassetid://131136157222328",
+        Heart = "rbxassetid://107252414250704",
+        Sleeping = "rbxassetid://112356892711029",
+        Peek = "rbxassetid://133697879389288",
+        Curled = "rbxassetid://101414414893719",
     },
 })
 

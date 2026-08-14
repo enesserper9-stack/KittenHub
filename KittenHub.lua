@@ -11,9 +11,16 @@ local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
 KittenHub.__index = KittenHub
-KittenHub.Version = "0.2.0"
-KittenHub.AssetId = "rbxassetid://89700767026016"
-KittenHub.SpriteSheetId = "rbxassetid://73389330357206"
+KittenHub.Version = "0.2.1"
+KittenHub.AssetId = "rbxassetid://102065448126548"
+KittenHub.DefaultAssets = {
+	Logo = "rbxassetid://102065448126548",
+	Paw = "rbxassetid://131136157222328",
+	Heart = "rbxassetid://107252414250704",
+	Sleeping = "rbxassetid://112356892711029",
+	Peek = "rbxassetid://133697879389288",
+	Curled = "rbxassetid://101414414893719",
+}
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
 -- Fredoka One, Builder Sans, and Builder Mono provide a native visual equivalent.
@@ -43,16 +50,6 @@ local Theme = {
 	White = Color3.fromRGB(255, 255, 255),
 	Black = Color3.fromRGB(0, 0, 0),
 	Fonts = Fonts,
-}
-
--- Rectangles for assets/kitten-sprites.png (1254x1254).
-local SpriteRects = {
-	Logo = { Offset = Vector2.new(40, 251), Size = Vector2.new(378, 333) },
-	Paw = { Offset = Vector2.new(418, 288), Size = Vector2.new(418, 274) },
-	Heart = { Offset = Vector2.new(917, 283), Size = Vector2.new(278, 260) },
-	Sleeping = { Offset = Vector2.new(28, 712), Size = Vector2.new(390, 259) },
-	Peek = { Offset = Vector2.new(418, 732), Size = Vector2.new(418, 245) },
-	Curled = { Offset = Vector2.new(836, 706), Size = Vector2.new(373, 275) },
 }
 
 local function create(className: string, properties: {[string]: any}?, children: {Instance}?): Instance
@@ -198,12 +195,6 @@ local function imageOrGlyph(parent: Instance, properties: {[string]: any}, image
 end
 
 local function spriteOrGlyph(parent: Instance, properties: {[string]: any}, assets: {[string]: any}, role: string, glyph: string): GuiObject
-	local rect = SpriteRects[role]
-	if assets.SpriteSheet and assets.SpriteSheet ~= "" and rect then
-		properties.ImageRectOffset = rect.Offset
-		properties.ImageRectSize = rect.Size
-		return imageOrGlyph(parent, properties, assets.SpriteSheet, glyph)
-	end
 	local direct = assets[role]
 	if not direct and role == "Logo" then
 		direct = assets.Logo or assets.RowIcon
@@ -380,8 +371,12 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	local title = options.Title or "KittenHub"
 	local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
 	local assets = options.Assets or {}
-	assets.SpriteSheet = assets.SpriteSheet or KittenHub.SpriteSheetId
-	assets.Logo = assets.Logo or options.Icon or KittenHub.AssetId
+	assets.Logo = assets.Logo or options.Icon or KittenHub.DefaultAssets.Logo
+	assets.Paw = assets.Paw or KittenHub.DefaultAssets.Paw
+	assets.Heart = assets.Heart or KittenHub.DefaultAssets.Heart
+	assets.Sleeping = assets.Sleeping or KittenHub.DefaultAssets.Sleeping
+	assets.Peek = assets.Peek or KittenHub.DefaultAssets.Peek
+	assets.Curled = assets.Curled or KittenHub.DefaultAssets.Curled
 	assets.RowIcon = assets.RowIcon or assets.Logo
 
 	local existing = getParent():FindFirstChild("KittenHubUI")
