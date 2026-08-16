@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.15"
+KittenHub.Version = "0.5.16"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -464,8 +464,26 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		properties.ScaleType = properties.ScaleType or Enum.ScaleType.Fit
 		properties.BackgroundTransparency = 1
 		properties.Parent = parent
-		local image = create("ImageLabel", properties) :: ImageLabel
+		-- UIScale grows a label away from its AnchorPoint, and these labels are
+		-- laid out from their top left corner: scaling in place pushed each icon
+		-- down and to the right of the slot it belongs to. Re-anchor to the
+		-- centre of the same slot first, so the extra size spreads evenly and the
+		-- layout box stays where the caller put it.
 		local assetScale = KittenHub.AssetScales[imageId]
+		if assetScale then
+			local size = properties.Size or UDim2.fromScale(1, 1)
+			local position = properties.Position or UDim2.fromOffset(0, 0)
+			local anchor = properties.AnchorPoint or Vector2.zero
+			properties.AnchorPoint = Vector2.new(0.5, 0.5)
+			properties.Position = UDim2.new(
+				position.X.Scale + size.X.Scale * (0.5 - anchor.X),
+				position.X.Offset + size.X.Offset * (0.5 - anchor.X),
+				position.Y.Scale + size.Y.Scale * (0.5 - anchor.Y),
+				position.Y.Offset + size.Y.Offset * (0.5 - anchor.Y)
+			)
+		end
+
+		local image = create("ImageLabel", properties) :: ImageLabel
 		if assetScale then
 			create("UIScale", { Scale = assetScale, Parent = image })
 		end

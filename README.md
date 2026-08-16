@@ -41,6 +41,11 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.16` fixes where those scaled icons land. `UIScale` grows a label away from
+its `AnchorPoint`, and icon labels are positioned from their top left corner, so
+scaling in place shifted each one down and to the right. Scaled labels are
+re-anchored to the centre of the same slot first.
+
 `0.5.15` adds `AssetScales`. The crossed rifles, horse, and gun artwork carries
 a wider transparent margin than the earlier icons, so at the same label size
 their subject drew noticeably smaller. Each of those ids now gets a `UIScale`
