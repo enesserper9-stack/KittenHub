@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.7"
+KittenHub.Version = "0.5.8"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -237,116 +237,24 @@ end
 -- anchor to the bottom edge. The content divider used to be placed at the design
 -- canvas height minus a constant, which drifted the moment a window was created
 -- with a custom Size.
-local function dashedLine(parent: Instance, y: number | UDim, left: number, right: number, fallbackWidth: number)
+--
+-- This used to draw a row of separate dash frames. A dash row is a stack of
+-- bright fragments rather than a line: at these widths it produced 40+ instances
+-- per divider, and each fragment read as a speck instead of a rule. One grey
+-- frame states the same separation and costs one instance.
+local function separatorLine(parent: Instance, y: number | UDim, left: number, right: number)
 	local offsetY: UDim = if typeof(y) == "UDim" then y else UDim.new(0, y :: number)
-	local holder = create("Frame", {
-		Name = "DashedDivider",
+	return create("Frame", {
+		Name = "Divider",
 		AnchorPoint = Vector2.new(0, offsetY.Scale),
 		Position = UDim2.new(0, left, offsetY.Scale, offsetY.Offset),
 		Size = UDim2.new(1, -(left + right), 0, 1),
-		BackgroundTransparency = 1,
+		BackgroundColor3 = Theme.Divider,
+		BackgroundTransparency = 0,
+		BorderSizePixel = 0,
 		LayoutOrder = 1,
 		Parent = parent,
 	}) :: Frame
-
-	-- Dash count follows the real rendered width instead of a hardcoded 900px,
-	-- and is only rebuilt when the count actually changes.
-	local currentCount = -1
-	local function rebuild()
-		local width = holder.AbsoluteSize.X
-		if width <= 0 then
-			width = fallbackWidth
-		end
-		local count = math.max(1, math.floor(width / 18))
-		if count == currentCount then
-			return
-		end
-		currentCount = count
-		for _, child in ipairs(holder:GetChildren()) do
-			if child.Name == "Dash" then
-				child:Destroy()
-			end
-		end
-		for index = 0, count - 1 do
-			create("Frame", {
-				Name = "Dash",
-				Position = UDim2.new(index / count, 0, 0, 0),
-				Size = UDim2.fromOffset(9, 1),
-				BackgroundColor3 = Theme.Border,
-				BackgroundTransparency = 0.55,
-				BorderSizePixel = 0,
-				Parent = holder,
-			})
-		end
-	end
-
-	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(rebuild)
-	rebuild()
-	return holder
-end
-
--- Roblox has no dashed UIStroke, so the panel outlines from the reference are
--- drawn as individual dash segments along each edge, skipping the rounded
--- corners. Segments are rebuilt only when the panel size actually changes.
-local function dashedBorder(frame: GuiObject, radius: number, transparency: number?, color: Color3?)
-	local holder = create("Frame", {
-		Name = "DashedBorder",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ZIndex = 2,
-		Parent = frame,
-	}) :: Frame
-
-	local dashLength, gap, thickness = 7, 6, 1
-	local dashColor = color or Theme.Border
-	local alpha = transparency or 0.3
-	local lastWidth, lastHeight = -1, -1
-
-	local function dash(position: UDim2, size: UDim2)
-		create("Frame", {
-			Name = "Dash",
-			Position = position,
-			Size = size,
-			BackgroundColor3 = dashColor,
-			BackgroundTransparency = alpha,
-			BorderSizePixel = 0,
-			Parent = holder,
-		})
-	end
-
-	local function rebuild()
-		local size = holder.AbsoluteSize
-		local width, height = math.floor(size.X), math.floor(size.Y)
-		if width <= 0 or height <= 0 or (width == lastWidth and height == lastHeight) then
-			return
-		end
-		lastWidth, lastHeight = width, height
-		holder:ClearAllChildren()
-
-		local step = dashLength + gap
-		local horizontalSpan = math.max(width - (radius * 2), 0)
-		local verticalSpan = math.max(height - (radius * 2), 0)
-		local horizontalCount = math.max(1, math.floor((horizontalSpan + gap) / step))
-		local verticalCount = math.max(1, math.floor((verticalSpan + gap) / step))
-		local horizontalPad = (horizontalSpan - ((horizontalCount * step) - gap)) / 2
-		local verticalPad = (verticalSpan - ((verticalCount * step) - gap)) / 2
-
-		for index = 0, horizontalCount - 1 do
-			local x = radius + horizontalPad + (index * step)
-			dash(UDim2.fromOffset(x, 0), UDim2.fromOffset(dashLength, thickness))
-			dash(UDim2.new(0, x, 1, -thickness), UDim2.fromOffset(dashLength, thickness))
-		end
-		for index = 0, verticalCount - 1 do
-			local y = radius + verticalPad + (index * step)
-			dash(UDim2.fromOffset(0, y), UDim2.fromOffset(thickness, dashLength))
-			dash(UDim2.new(1, -thickness, 0, y), UDim2.fromOffset(thickness, dashLength))
-		end
-	end
-
-	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(rebuild)
-	task.defer(rebuild)
-	return holder
 end
 
 -- One PreloadAsync per icon opened ~60 separate requests, and ContentProvider
@@ -1042,7 +950,6 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		gradient(Color3.fromRGB(36, 37, 41), Color3.fromRGB(20, 21, 23), 110),
 	}) :: Frame
 	dropShadow(sidebar, 26, 0, 0.55, 8)
-	dashedBorder(sidebar, 20)
 	addSoftPattern(sidebar, assets)
 	spriteOrGlyph(root, {
 		Name = "SidebarPeek",
@@ -1088,7 +995,6 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = sidebar,
 	}, { corner(17), stroke(Theme.Border, Line.Panel, true) }) :: Frame
 	dropShadow(footer, 16, 0, 0.6, 5)
-	dashedBorder(footer, 17)
 
 
 	spriteOrGlyph(footer, {
@@ -1123,16 +1029,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		TextSize = 14,
 		Parent = footer,
 	})
-	label({
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -14, 0.5, 0),
-		Size = UDim2.fromOffset(12, 30),
-		Text = "⋮",
-		TextColor3 = Theme.FaintText,
-		TextSize = 18,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Parent = footer,
-	})
+	-- The footer used to end in a "⋮" overflow marker. Nothing opened from it, and
+	-- the rounded font drew it as a smudge against the card edge.
 
 	local content = create("Frame", {
 		Name = "Content",
@@ -1148,11 +1046,10 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		gradient(Color3.fromRGB(36, 37, 41), Color3.fromRGB(19, 20, 22), 105),
 	}) :: Frame
 	dropShadow(content, 26, 0, 0.55, 8)
-	dashedBorder(content, 20)
 	-- No background pattern on the content panel. A dense page hides it entirely
 	-- while a sparse one (Settings, Players) leaves it stranded in open space, so
 	-- the texture only ever showed up as clutter on the emptier tabs.
-	local contentFooterLine = dashedLine(content, UDim.new(1, -30), 0, 0, 900)
+	local contentFooterLine = separatorLine(content, UDim.new(1, -30), 0, 0)
 	spriteOrGlyph(contentFooterLine, {
 		Name = "FooterHeart",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -1635,7 +1532,7 @@ function WindowMethods:AddTab(options: any)
 		TextSize = 24,
 		ZIndex = 3,
 	}, self.Assets, "Paw", "*")
-	local pageDivider = dashedLine(pageHeader, 72, 0, 0, 900)
+	local pageDivider = separatorLine(pageHeader, 72, 0, 0)
 	pageDivider.LayoutOrder = 0
 	spriteOrGlyph(pageDivider, {
 		AnchorPoint = Vector2.new(0.5, 0.5),

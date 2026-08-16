@@ -41,6 +41,15 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.8` simplifies the line work:
+
+- Dashed rules and dashed panel outlines are gone. Both were built from dozens of
+  separate 1px frames, which read as rows of bright specks rather than as lines
+  and cost 40+ instances per divider. Panels keep their `UIStroke` edge, and the
+  page and content dividers are one solid grey frame each.
+- The `⋮` overflow marker at the end of the sidebar footer is removed; it opened
+  nothing and the rounded font drew it as a smudge.
+
 `0.5.7` is a typography and contrast pass:
 
 - Interface text moves from Builder Sans to Nunito. The neutral grotesk did not
