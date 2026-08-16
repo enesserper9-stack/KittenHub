@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.8"
+KittenHub.Version = "0.5.9"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -2110,14 +2110,42 @@ function SectionMethods:AddDropdown(options: any)
 		corner(12),
 		stroke(Theme.Border, Line.Popup, true),
 		padding(7, 7, 7, 7),
-		listLayout(3),
 		gradient(Color3.fromRGB(68, 69, 76), Color3.fromRGB(38, 39, 44), 105),
 	}) :: Frame
+	-- Options live in a scrolling body rather than directly in the popup. A plain
+	-- frame with AutomaticSize grows without limit, so a dropdown with twenty
+	-- values drew a list taller than the viewport. AutomaticSize plus a
+	-- UISizeConstraint caps the height and hands the overflow to the scrollbar,
+	-- which is the pattern Roblox's own layout docs recommend for long lists.
+	local listBody = create("ScrollingFrame", {
+		Name = "OptionList",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.fromOffset(0, 0),
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = 3,
+		ScrollBarImageColor3 = Theme.Border,
+		ScrollBarImageTransparency = 0.4,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 42,
+		Parent = list,
+	}, {
+		listLayout(4),
+		create("UISizeConstraint", { MaxSize = Vector2.new(math.huge, 246) }),
+	}) :: ScrollingFrame
 	local control = { Type = "Dropdown", Value = options.Default or values[1], Values = values, Instance = row }
 	local window = self.Window
 	local popup = {}
 	local trackConnection: RBXScriptConnection? = nil
 	local optionConnections: {RBXScriptConnection} = {}
+	-- Rows are kept so the selection marker can be repainted on every row when the
+	-- value changes, not just on the row that was clicked.
+	local optionRows: {{[string]: any}} = {}
+	-- Forward declared: control:Set is written above the row builder but has to
+	-- repaint the rows it created.
+	local repaintOptions: () -> ()
 
 	local function positionList()
 		local anchor = dropdown.AbsolutePosition
@@ -2177,6 +2205,9 @@ function SectionMethods:AddDropdown(options: any)
 		end
 		self.Value = value
 		valueText.Text = tostring(value)
+		if repaintOptions then
+			repaintOptions()
+		end
 		popup.Close()
 		if not silent then
 			safeCallback(options.Callback, value)
@@ -2188,11 +2219,12 @@ function SectionMethods:AddDropdown(options: any)
 		-- window._connections left one dead entry per option per refresh, so a
 		-- dropdown refreshed on a loop grew that table without bound.
 		disconnectAll(optionConnections)
-		for _, child in ipairs(list:GetChildren()) do
+		for _, child in ipairs(listBody:GetChildren()) do
 			if child:IsA("TextButton") then
 				child:Destroy()
 			end
 		end
+		table.clear(optionRows)
 		if not keepValue or not table.find(newValues, self.Value) then
 			self.Value = newValues[1]
 		end
@@ -2201,25 +2233,124 @@ function SectionMethods:AddDropdown(options: any)
 			self:Set(self.Value, true)
 		end
 	end
+	-- An option row was a bare TextButton whose only state was a slightly lighter
+	-- background on hover: nothing marked the current value, and every row carried
+	-- the same weight and colour, so the list read as a block of plain text. Each
+	-- row now owns a left accent bar, its own label, and a drawn check, and the
+	-- three are repainted together whenever the selection or hover changes.
+	local function paintOption(entry: {[string]: any}, hovered: boolean)
+		local selected = entry.Value == control.Value
+		local duration = 0.12
+		tween(entry.Button, duration, {
+			BackgroundTransparency = if selected then 0.62 elseif hovered then 0.78 else 1,
+		})
+		tween(entry.Accent, duration, {
+			BackgroundTransparency = selected and 0 or 1,
+			Size = UDim2.fromOffset(3, selected and 20 or 8),
+		})
+		tween(entry.Label, duration, {
+			TextColor3 = (selected or hovered) and Theme.Text or Theme.MutedText,
+			-- Hover nudges the label a few pixels right. It is the cheapest way to
+			-- make a row feel like a target rather than a line of text.
+			Position = UDim2.fromOffset(selected and 22 or (hovered and 20 or 16), 0),
+		})
+		entry.Label.FontFace = selected and Fonts.Semibold or Fonts.Medium
+		for _, piece in ipairs(entry.Check:GetChildren()) do
+			if piece:IsA("Frame") then
+				tween(piece, duration, { BackgroundTransparency = selected and 0 or 1 })
+			end
+		end
+	end
+
+	function repaintOptions()
+		for _, entry in ipairs(optionRows) do
+			paintOption(entry, false)
+		end
+	end
+
 	function control:_build()
 		for index, value in ipairs(self.Values) do
 			local option = button({
-				Size = UDim2.new(1, 0, 0, 38),
+				Name = "Option",
+				Size = UDim2.new(1, 0, 0, 40),
 				BackgroundColor3 = Theme.Selected,
 				BackgroundTransparency = 1,
-				Text = tostring(value),
-				TextColor3 = Theme.Text,
-				TextSize = 15,
-				TextXAlignment = Enum.TextXAlignment.Left,
+				Text = "",
 				LayoutOrder = index,
 				ZIndex = 42,
-				Parent = list,
-			}, { corner(6), padding(0, 8, 0, 8) })
+				Parent = listBody,
+			}, { corner(8) })
+
+			-- Selection marker on the leading edge. A filled bar survives at any text
+			-- size, where a coloured background alone disappears against the popup.
+			local accent = create("Frame", {
+				Name = "Accent",
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, 7, 0.5, 0),
+				Size = UDim2.fromOffset(3, 8),
+				BackgroundColor3 = Theme.White,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				ZIndex = 43,
+				Parent = option,
+			}, { corner(2) }) :: Frame
+
+			local optionLabel = label({
+				Name = "OptionText",
+				Position = UDim2.fromOffset(16, 0),
+				Size = UDim2.new(1, -52, 1, 0),
+				FontFace = Fonts.Medium,
+				Text = tostring(value),
+				TextColor3 = Theme.MutedText,
+				TextSize = 16,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				ZIndex = 43,
+				Parent = option,
+			})
+
+			-- Drawn check instead of a "✓" glyph: the tick is the only mark on the
+			-- row, and a font glyph sits on its own baseline rather than the row's.
+			local check = create("Frame", {
+				Name = "Check",
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -12, 0.5, 0),
+				Size = UDim2.fromOffset(14, 14),
+				BackgroundTransparency = 1,
+				ZIndex = 43,
+				Parent = option,
+			}) :: Frame
+			create("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromOffset(4, 9),
+				Size = UDim2.fromOffset(2, 7),
+				Rotation = -45,
+				BackgroundColor3 = Theme.White,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				ZIndex = 44,
+				Parent = check,
+			}, { corner(1) })
+			create("Frame", {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromOffset(9, 6),
+				Size = UDim2.fromOffset(2, 13),
+				Rotation = 45,
+				BackgroundColor3 = Theme.White,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				ZIndex = 44,
+				Parent = check,
+			}, { corner(1) })
+
+			local entry = { Value = value, Button = option, Accent = accent, Label = optionLabel, Check = check }
+			table.insert(optionRows, entry)
+			paintOption(entry, false)
+
 			table.insert(optionConnections, option.MouseEnter:Connect(function()
-				tween(option, 0.12, { BackgroundTransparency = 0.2 })
+				paintOption(entry, true)
 			end))
 			table.insert(optionConnections, option.MouseLeave:Connect(function()
-				tween(option, 0.12, { BackgroundTransparency = 1 })
+				paintOption(entry, false)
 			end))
 			table.insert(optionConnections, option.MouseButton1Click:Connect(function()
 				control:Set(value)

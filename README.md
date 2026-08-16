@@ -41,6 +41,18 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.9` rebuilds the dropdown list:
+
+- Option rows were bare text with a hover tint and no marker for the current
+  value. Each row now carries a left accent bar, a drawn check, and a weight and
+  colour change when selected, plus a small indent on hover so it reads as a
+  target rather than a line of text.
+- Long lists scroll instead of growing past the viewport: the options sit in a
+  `ScrollingFrame` with `AutomaticSize` capped by a `UISizeConstraint` (246px),
+  which is the pattern Roblox's layout guidance recommends for overflow.
+- Option text moves to 16px Nunito, medium for unselected rows and semibold for
+  the selected one.
+
 `0.5.8` simplifies the line work:
 
 - Dashed rules and dashed panel outlines are gone. Both were built from dozens of
