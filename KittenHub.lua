@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.10"
+KittenHub.Version = "0.5.11"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -29,6 +29,11 @@ KittenHub.DefaultAssets = {
 	Bell = "rbxassetid://80479928306450",
 	Unload = "rbxassetid://93174476369835",
 	ToggleUI = "rbxassetid://94264300792153",
+	-- Alternate roles. Nothing in the library reaches for these on its own; they
+	-- exist so a script can pick a subject-matching icon instead of a generic
+	-- paw. Pass the role name as IconRole.
+	CrossedRifles = "rbxassetid://130005119002593",
+	Shield = "rbxassetid://140643139770186",
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
@@ -722,21 +727,13 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	local toggleKey = options.ToggleKey or Enum.KeyCode.RightShift
 	local assets = options.Assets or {}
 	assets.Logo = assets.Logo or options.Icon or KittenHub.DefaultAssets.Logo
-	assets.Paw = assets.Paw or KittenHub.DefaultAssets.Paw
-	assets.Heart = assets.Heart or KittenHub.DefaultAssets.Heart
-	assets.Sleeping = assets.Sleeping or KittenHub.DefaultAssets.Sleeping
-	assets.Peek = assets.Peek or KittenHub.DefaultAssets.Peek
-	assets.Curled = assets.Curled or KittenHub.DefaultAssets.Curled
-	assets.DarkCat = assets.DarkCat or KittenHub.DefaultAssets.DarkCat
-	assets.DropdownCat = assets.DropdownCat or KittenHub.DefaultAssets.DropdownCat
-	assets.Sparkles = assets.Sparkles or KittenHub.DefaultAssets.Sparkles
-	assets.Home = assets.Home or KittenHub.DefaultAssets.Home
-	assets.Plus = assets.Plus or KittenHub.DefaultAssets.Plus
-	assets.Players = assets.Players or KittenHub.DefaultAssets.Players
-	assets.Settings = assets.Settings or KittenHub.DefaultAssets.Settings
-	assets.Bell = assets.Bell or KittenHub.DefaultAssets.Bell
-	assets.Unload = assets.Unload or KittenHub.DefaultAssets.Unload
-	assets.ToggleUI = assets.ToggleUI or KittenHub.DefaultAssets.ToggleUI
+	-- Fill in every role the caller left out. Listing them one by one meant a new
+	-- default asset was silently unavailable until this block was edited too.
+	for role, id in pairs(KittenHub.DefaultAssets) do
+		if assets[role] == nil then
+			assets[role] = id
+		end
+	end
 	assets.RowIcon = assets.RowIcon or assets.Logo
 
 	local existing = getParent():FindFirstChild("KittenHubUI")

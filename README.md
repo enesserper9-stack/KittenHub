@@ -41,6 +41,14 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.11` adds alternate icon roles:
+
+- `CrossedRifles` and `Shield` join `DefaultAssets`. No control reaches for them
+  on its own — they are there so a script can pick a subject-matching icon via
+  `IconRole` instead of a generic paw.
+- `CreateWindow` fills missing roles by iterating `DefaultAssets` rather than
+  assigning them one by one, so a newly added default is available immediately.
+
 `0.5.10` opts out of automatic localization:
 
 - Every GUI object the library creates sets `AutoLocalize = false`. Roblox
