@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.6"
+KittenHub.Version = "0.5.7"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -42,36 +42,64 @@ local function font(family: string, weight: Enum.FontWeight, fallback: string): 
 	return Font.new("rbxasset://fonts/families/" .. fallback .. ".json", weight)
 end
 
+-- Builder Sans is the Roblox UI default: a neutral grotesk with open apertures
+-- and straight terminals. Next to Fredoka One's round display letters it read as
+-- two unrelated typefaces, and at 14-18px its thin strokes washed out against the
+-- near-black surfaces. Nunito is rounded like the headings, carries more weight
+-- at small sizes, and ships with the engine.
 local Fonts = {
 	Display = font("FredokaOne", Enum.FontWeight.Regular, "SourceSansPro"),
-	Body = font("BuilderSans", Enum.FontWeight.Regular, "SourceSansPro"),
-	Medium = font("BuilderSans", Enum.FontWeight.Medium, "SourceSansPro"),
-	Semibold = font("BuilderSans", Enum.FontWeight.SemiBold, "SourceSansPro"),
-	Bold = font("BuilderSans", Enum.FontWeight.Bold, "SourceSansPro"),
-	Mono = font("BuilderMono", Enum.FontWeight.Regular, "RobotoMono"),
+	Body = font("Nunito", Enum.FontWeight.Medium, "BuilderSans"),
+	Medium = font("Nunito", Enum.FontWeight.SemiBold, "BuilderSans"),
+	Semibold = font("Nunito", Enum.FontWeight.Bold, "BuilderSans"),
+	Bold = font("Nunito", Enum.FontWeight.ExtraBold, "BuilderSans"),
+	-- Numeric readouts stay in the rounded family so a slider percentage matches
+	-- its label; only true technical input (textbox, keybind) keeps the mono face.
+	Value = font("Nunito", Enum.FontWeight.Bold, "BuilderSans"),
+	Mono = font("BuilderMono", Enum.FontWeight.Medium, "RobotoMono"),
+}
+
+-- Hairline transparency per surface role. These were scattered literals between
+-- 0.74 and 0.9, which put most borders past the point where a 1px line survives
+-- on a near-black background: the panels lost their edges and the whole window
+-- flattened out. Keeping them in one table also makes the whole set tunable.
+local Line = {
+	Window = 0.46,
+	Panel = 0.52,
+	Card = 0.56,
+	Control = 0.5,
+	Tile = 0.54,
+	Popup = 0.44,
+	-- The second, tighter outline drawn inside buttons and notifications. It is
+	-- meant to be felt rather than seen, so it stays well behind the outer edge.
+	Inner = 0.78,
+	TabSelected = 0.54,
 }
 
 local MAX_NOTIFICATIONS = 5
--- Seconds an asset may stay unloaded before its glyph placeholder is shown, and
--- how long the watcher keeps checking whether it eventually arrived.
+-- Seconds an on-screen asset may stay unloaded before its glyph placeholder is
+-- shown. The watcher keeps checking afterwards: a late arrival has to be able to
+-- take the glyph back down.
 local FALLBACK_GLYPH_DELAY = 12
-local FALLBACK_GIVE_UP = 90
 
 local Theme = {
-	Background = Color3.fromRGB(9, 10, 10),
-	Surface = Color3.fromRGB(24, 25, 26),
-	SurfaceHover = Color3.fromRGB(38, 39, 41),
-	Selected = Color3.fromRGB(51, 52, 55),
+	-- Surfaces used to sit within a few RGB points of each other, so the window,
+	-- the panels and the cards read as one flat black rectangle. Each layer now
+	-- steps up in grey, which is what gives the reference its stacked look.
+	Background = Color3.fromRGB(10, 11, 12),
+	Surface = Color3.fromRGB(28, 29, 32),
+	SurfaceHover = Color3.fromRGB(45, 46, 50),
+	Selected = Color3.fromRGB(60, 61, 66),
 	-- Borders read as a light tint at high transparency rather than a solid grey
 	-- line, which is what separates an inset hairline from a drawn outline.
-	Border = Color3.fromRGB(168, 170, 178),
-	Divider = Color3.fromRGB(57, 58, 61),
+	Border = Color3.fromRGB(186, 188, 196),
+	Divider = Color3.fromRGB(76, 78, 84),
 	Text = Color3.fromRGB(244, 244, 245),
 	MutedText = Color3.fromRGB(188, 188, 194),
 	FaintText = Color3.fromRGB(113, 113, 122),
 	Accent = Color3.fromRGB(255, 255, 255),
 	AccentSoft = Color3.fromRGB(222, 222, 226),
-	Track = Color3.fromRGB(61, 61, 65),
+	Track = Color3.fromRGB(74, 75, 80),
 	-- Only non-monochrome value in the theme: close is the one destructive
 	-- control, so its hover plate is the single place colour carries meaning.
 	Danger = Color3.fromRGB(196, 72, 78),
@@ -244,8 +272,8 @@ local function dashedLine(parent: Instance, y: number | UDim, left: number, righ
 				Name = "Dash",
 				Position = UDim2.new(index / count, 0, 0, 0),
 				Size = UDim2.fromOffset(9, 1),
-				BackgroundColor3 = Theme.FaintText,
-				BackgroundTransparency = 0.38,
+				BackgroundColor3 = Theme.Border,
+				BackgroundTransparency = 0.55,
 				BorderSizePixel = 0,
 				Parent = holder,
 			})
@@ -272,7 +300,7 @@ local function dashedBorder(frame: GuiObject, radius: number, transparency: numb
 
 	local dashLength, gap, thickness = 7, 6, 1
 	local dashColor = color or Theme.Border
-	local alpha = transparency or 0.35
+	local alpha = transparency or 0.3
 	local lastWidth, lastHeight = -1, -1
 
 	local function dash(position: UDim2, size: UDim2)
@@ -363,7 +391,7 @@ end
 -- coroutine meant 60 threads waking twice a second for the entire session, and
 -- none of them noticed a destroyed window until their next tick. One shared
 -- watcher walks the pending list instead, and drops entries whose image has
--- loaded, been destroyed, or run past the give-up deadline.
+-- loaded or been destroyed.
 type FallbackEntry = {
 	Image: ImageLabel,
 	Fallback: TextLabel,
@@ -373,6 +401,24 @@ type FallbackEntry = {
 
 local pendingFallbacks: {FallbackEntry} = {}
 local fallbackWatcherRunning = false
+
+-- Roblox does not download an image for a GUI that is not on screen, so an icon
+-- on an unselected tab reports IsLoaded = false indefinitely and nothing about
+-- that is a failure. The countdown to the glyph therefore only runs while the
+-- label is actually being rendered.
+local function isRendered(element: GuiObject): boolean
+	local current: Instance? = element
+	while current and not current:IsA("ScreenGui") do
+		if current:IsA("GuiObject") and not current.Visible then
+			return false
+		end
+		current = current.Parent
+	end
+	if current and current:IsA("ScreenGui") and not current.Enabled then
+		return false
+	end
+	return current ~= nil
+end
 
 local function runFallbackWatcher()
 	if fallbackWatcherRunning then
@@ -395,6 +441,14 @@ local function runFallbackWatcher()
 						entry.Fallback.Visible = false
 					end
 					done = true
+				elseif not isRendered(image) then
+					-- Off screen: hide any glyph already shown and restart the clock, so
+					-- switching to a tab gives its icons a full fetch window instead of
+					-- inheriting an expired one.
+					if entry.Fallback.Parent and entry.Fallback.Visible then
+						entry.Fallback.Visible = false
+					end
+					entry.Start = now
 				else
 					local elapsed = now - entry.Start
 					if elapsed > FALLBACK_GLYPH_DELAY then
@@ -410,17 +464,19 @@ local function runFallbackWatcher()
 								"Check moderation and Asset Privacy/Open Use permissions."
 							)
 						end
-						if elapsed > FALLBACK_GIVE_UP then
-							done = true
-						end
 					end
+					-- No give-up deadline. Dropping the entry left the glyph painted on
+					-- top of the image for the rest of the session if the asset arrived
+					-- late, which is the grey speck sitting over a loaded icon.
 				end
 
 				if done then
 					table.remove(pendingFallbacks, index)
 				end
 			end
-			task.wait(0.5)
+			-- One second is well inside the delay before a glyph appears, and the list
+			-- empties itself as images resolve, so the steady state is no thread at all.
+			task.wait(1)
 		end
 		fallbackWatcherRunning = false
 	end)
@@ -809,8 +865,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = screenGui,
 	}, {
 		corner(18),
-		stroke(Theme.Border, 0.74, true),
-		gradient(Color3.fromRGB(12, 13, 13), Color3.fromRGB(7, 8, 8), 115),
+		stroke(Theme.Border, Line.Window, true),
+		gradient(Color3.fromRGB(16, 17, 19), Color3.fromRGB(8, 9, 10), 115),
 	}) :: Frame
 	dropShadow(root, 54, 6, 0.34, 14)
 	addSoftPattern(root, assets)
@@ -982,8 +1038,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = root,
 	}, {
 		corner(20),
-		stroke(Theme.Border, 0.8, true),
-		gradient(Color3.fromRGB(23, 24, 26), Color3.fromRGB(16, 17, 18), 110),
+		stroke(Theme.Border, Line.Panel, true),
+		gradient(Color3.fromRGB(36, 37, 41), Color3.fromRGB(20, 21, 23), 110),
 	}) :: Frame
 	dropShadow(sidebar, 26, 0, 0.55, 8)
 	dashedBorder(sidebar, 20)
@@ -1030,7 +1086,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		BackgroundColor3 = Theme.SurfaceHover,
 		BorderSizePixel = 0,
 		Parent = sidebar,
-	}, { corner(17), stroke(Theme.Border, 0.82, true) }) :: Frame
+	}, { corner(17), stroke(Theme.Border, Line.Panel, true) }) :: Frame
 	dropShadow(footer, 16, 0, 0.6, 5)
 	dashedBorder(footer, 17)
 
@@ -1054,10 +1110,15 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		TextSize = 17,
 		Parent = footer,
 	})
+	-- "Signed in" restated what the avatar already showed. The running library
+	-- version is the one thing this line can say that is not visible anywhere else,
+	-- and it makes a stale cached copy obvious at a glance.
 	label({
+		Name = "FooterStatus",
 		Position = UDim2.fromOffset(82, 43),
 		Size = UDim2.new(1, -112, 0, 24),
-		Text = options.UserStatus or "Signed in",
+		FontFace = Fonts.Medium,
+		Text = options.UserStatus or ("KittenHub v" .. KittenHub.Version),
 		TextColor3 = Theme.MutedText,
 		TextSize = 14,
 		Parent = footer,
@@ -1083,8 +1144,8 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		Parent = root,
 	}, {
 		corner(20),
-		stroke(Theme.Border, 0.8, true),
-		gradient(Color3.fromRGB(23, 24, 26), Color3.fromRGB(15, 16, 17), 105),
+		stroke(Theme.Border, Line.Panel, true),
+		gradient(Color3.fromRGB(36, 37, 41), Color3.fromRGB(19, 20, 22), 105),
 	}) :: Frame
 	dropShadow(content, 26, 0, 0.55, 8)
 	dashedBorder(content, 20)
@@ -1360,8 +1421,8 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		Parent = slot,
 	}, {
 		corner(14),
-		stroke(Theme.Border, 0.76, true),
-		gradient(Color3.fromRGB(38, 39, 42), Color3.fromRGB(24, 25, 27), 105),
+		stroke(Theme.Border, Line.Popup, true),
+		gradient(Color3.fromRGB(52, 53, 58), Color3.fromRGB(28, 29, 32), 105),
 	}) :: Frame
 	create("Frame", {
 		Name = "InnerBorder",
@@ -1371,7 +1432,7 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		BorderSizePixel = 0,
 		ZIndex = 53,
 		Parent = notification,
-	}, { corner(11), stroke(Theme.Border, 0.9) })
+	}, { corner(11), stroke(Theme.Border, Line.Inner) })
 	local iconTile = create("Frame", {
 		Name = "IconTile",
 		AnchorPoint = Vector2.new(0, 0.5),
@@ -1381,7 +1442,7 @@ function WindowMethods:Notify(options: {[string]: any}?)
 		BorderSizePixel = 0,
 		ZIndex = 54,
 		Parent = notification,
-	}, { corner(12), stroke(Theme.Border, 0.8, true) }) :: Frame
+	}, { corner(12), stroke(Theme.Border, Line.Tile, true) }) :: Frame
 	spriteOrGlyph(iconTile, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -1498,7 +1559,7 @@ function WindowMethods:AddTab(options: any)
 	}, {
 		corner(14),
 		tabStroke,
-		gradient(Color3.fromRGB(46, 47, 50), Color3.fromRGB(31, 32, 35), 100),
+		gradient(Color3.fromRGB(64, 65, 71), Color3.fromRGB(36, 37, 41), 100),
 	})
 
 	local tabIconImage = if type(tabIcon) == "string" and string.find(tabIcon, "rbxasset", 1, true) == 1
@@ -1628,7 +1689,7 @@ function WindowMethods:SelectTab(tab: any)
 		item.Page.Visible = selected
 		tween(item.Button, 0.18, { BackgroundTransparency = selected and 0 or 1 })
 		if item.Stroke then
-			tween(item.Stroke, 0.18, { Transparency = selected and 0.76 or 1 })
+			tween(item.Stroke, 0.18, { Transparency = selected and Line.TabSelected or 1 })
 		end
 		local icon = item.Button:FindFirstChild("Icon")
 		if icon and icon:IsA("TextLabel") then
@@ -1735,10 +1796,10 @@ function TabMethods:AddSection(options: any)
 		Parent = wrapper,
 	}, {
 		corner(22),
-		stroke(Theme.Border, 0.84, true),
+		stroke(Theme.Border, Line.Card, true),
 		padding(8, 18, 8, 18),
 		listLayout(0),
-		gradient(Color3.fromRGB(31, 32, 34), Color3.fromRGB(22, 23, 25), 105),
+		gradient(Color3.fromRGB(44, 45, 50), Color3.fromRGB(24, 25, 28), 105),
 	}) :: Frame
 
 	local section = setmetatable({
@@ -1788,7 +1849,7 @@ local function controlRow(section: any, height: number, title: string, descripti
 		BackgroundColor3 = Theme.Selected,
 		BorderSizePixel = 0,
 		Parent = row,
-	}, { corner(14), stroke(Theme.Border, 0.82, true) }) :: Frame
+	}, { corner(14), stroke(Theme.Border, Line.Tile, true) }) :: Frame
 	spriteOrGlyph(iconTile, {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
@@ -1860,7 +1921,7 @@ function SectionMethods:AddButton(options: any)
 		Parent = row,
 	}, {
 		corner(12),
-		stroke(Theme.Border, 0.84, true),
+		stroke(Theme.Border, Line.Control, true),
 	})
 	local actionSurface = create("Frame", {
 		Name = "Surface",
@@ -1871,7 +1932,7 @@ function SectionMethods:AddButton(options: any)
 		Parent = action,
 	}, {
 		corner(12),
-		gradient(Color3.fromRGB(62, 63, 67), Color3.fromRGB(40, 41, 44), 105),
+		gradient(Color3.fromRGB(80, 81, 88), Color3.fromRGB(45, 46, 51), 105),
 	}) :: Frame
 	create("Frame", {
 		Name = "InnerBorder",
@@ -1881,7 +1942,7 @@ function SectionMethods:AddButton(options: any)
 		BorderSizePixel = 0,
 		ZIndex = action.ZIndex + 1,
 		Parent = action,
-	}, { corner(9), stroke(Theme.Border, 0.9) })
+	}, { corner(9), stroke(Theme.Border, Line.Inner) })
 	spriteOrGlyph(action, {
 		Name = "ButtonKitten",
 		AnchorPoint = Vector2.new(0, 0.5),
@@ -1930,7 +1991,7 @@ function SectionMethods:AddToggle(options: any)
 		BackgroundColor3 = Theme.Selected,
 		BackgroundTransparency = 0,
 		Parent = row,
-	}, { corner(21), stroke(Theme.Border, 0.8, true) })
+	}, { corner(21), stroke(Theme.Border, Line.Control, true) })
 	local knob = create("Frame", {
 		AnchorPoint = Vector2.new(0, 0.5),
 		Position = UDim2.new(0, 4, 0.5, 0),
@@ -1993,9 +2054,9 @@ function SectionMethods:AddSlider(options: any)
 		Position = UDim2.new(1, -5, 0, 3),
 		Size = UDim2.fromOffset(100, 28),
 		Text = "",
-		FontFace = Fonts.Mono,
+		FontFace = Fonts.Value,
 		TextColor3 = Theme.Text,
-		TextSize = 16,
+		TextSize = 17,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = row,
 	})
@@ -2091,8 +2152,8 @@ function SectionMethods:AddDropdown(options: any)
 		Parent = row,
 	}, {
 		corner(12),
-		stroke(Theme.Border, 0.84, true),
-		gradient(Color3.fromRGB(56, 57, 61), Color3.fromRGB(36, 37, 40), 105),
+		stroke(Theme.Border, Line.Control, true),
+		gradient(Color3.fromRGB(74, 75, 82), Color3.fromRGB(41, 42, 47), 105),
 	})
 	local valueText = label({
 		Position = UDim2.fromOffset(18, 0),
@@ -2150,10 +2211,10 @@ function SectionMethods:AddDropdown(options: any)
 	}, {
 		listScale,
 		corner(12),
-		stroke(Theme.Border, 0.76, true),
+		stroke(Theme.Border, Line.Popup, true),
 		padding(7, 7, 7, 7),
 		listLayout(3),
-		gradient(Color3.fromRGB(50, 51, 55), Color3.fromRGB(32, 33, 36), 105),
+		gradient(Color3.fromRGB(68, 69, 76), Color3.fromRGB(38, 39, 44), 105),
 	}) :: Frame
 	local control = { Type = "Dropdown", Value = options.Default or values[1], Values = values, Instance = row }
 	local window = self.Window
@@ -2320,7 +2381,7 @@ function SectionMethods:AddTextbox(options: any)
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = row,
-	}, { corner(12), stroke(Theme.Border, 0.84, true), padding(0, 13, 0, 13) }) :: TextBox
+	}, { corner(12), stroke(Theme.Border, Line.Control, true), padding(0, 13, 0, 13) }) :: TextBox
 	local control = { Type = "Textbox", Value = textbox.Text, Instance = row }
 	function control:Set(value: string, silent: boolean?)
 		self.Value = tostring(value)
@@ -2350,7 +2411,7 @@ function SectionMethods:AddKeybind(options: any)
 		BackgroundTransparency = 0,
 		Text = "",
 		Parent = row,
-	}, { corner(11), stroke(Theme.Border, 0.8, true) })
+	}, { corner(11), stroke(Theme.Border, Line.Control, true) })
 	local keyLabel = label({
 		Size = UDim2.fromScale(1, 1),
 		Text = "",

@@ -41,6 +41,25 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.7` is a typography and contrast pass:
+
+- Interface text moves from Builder Sans to Nunito. The neutral grotesk did not
+  belong next to Fredoka One's round display letters, and its thin strokes washed
+  out at 14-18px on near-black. Weights step up one notch each (body is Medium,
+  titles are Bold), and slider readouts use the rounded face instead of mono.
+- Surfaces step apart in grey — window, panel, card, and control each sit on
+  their own level — and gradient ramps carry real contrast instead of two shades
+  of the same black.
+- Hairline transparencies moved into one `Line` table and were pulled back from
+  0.74-0.9 to 0.44-0.56, so panel edges survive against the dark background.
+  Dividers and dashes lightened to match.
+- The sidebar footer shows the running library version instead of "Signed in",
+  which also makes a stale cached copy obvious. `UserStatus` still overrides it.
+- Glyph placeholders no longer strand themselves on top of a loaded image. The
+  countdown runs only while a label is actually on screen, so icons on unopened
+  tabs stay clean, and the watcher no longer gives up on an asset that is simply
+  slow.
+
 `0.5.6` is a correctness and cost pass:
 
 - `PageTitle` is no longer accepted and ignored. On `CreateWindow` it names the
