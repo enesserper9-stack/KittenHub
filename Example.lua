@@ -142,6 +142,25 @@ Controls:AddDropdown({
 	end,
 })
 
+-- A dropdown with more rows than anyone wants to scroll takes a search box of
+-- its own. `SearchKey` returns extra text a row can be found by, on top of its
+-- label.
+local longList = {}
+for index = 1, 60 do
+	longList[index] = ("Item %02d"):format(index)
+end
+Controls:AddDropdown({
+	Text = "Searchable Dropdown",
+	Description = "Filters as you type. The list scrolls once it outgrows the popup.",
+	Values = longList,
+	Searchable = true,
+	SearchPlaceholder = "e.g. 07",
+	Flag = "ExampleSearchDropdown",
+	Callback = function(value)
+		print("Searchable dropdown:", value)
+	end,
+})
+
 local Inputs = NewTab:AddSection("Inputs")
 Inputs:AddTextbox({
 	Text = "Text Input",

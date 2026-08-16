@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.16"
+KittenHub.Version = "0.5.17"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -94,6 +94,13 @@ local Line = {
 }
 
 local MAX_NOTIFICATIONS = 5
+-- Dropdown popup geometry. The option list is sized from these rather than from
+-- the layout's AbsoluteContentSize, which lags a rebuild by a frame or two: a
+-- height taken from a stale measurement cut the last row off.
+local DROPDOWN_OPTION_HEIGHT = 40
+local DROPDOWN_OPTION_PADDING = 4
+local DROPDOWN_SEARCH_HEIGHT = 34
+local DROPDOWN_MAX_LIST_HEIGHT = 246
 -- Seconds an on-screen asset may stay unloaded before its glyph placeholder is
 -- shown. The watcher keeps checking afterwards: a late arrival has to be able to
 -- take the glyph back down.
@@ -2149,20 +2156,55 @@ function SectionMethods:AddDropdown(options: any)
 		corner(12),
 		stroke(Theme.Border, Line.Popup, true),
 		padding(7, 7, 7, 7),
+		-- The popup stacks an optional search box above the scrolling body, so its
+		-- children are laid out rather than each one positioned by hand.
+		listLayout(6),
 		gradient(Color3.fromRGB(68, 69, 76), Color3.fromRGB(38, 39, 44), 105),
 	}) :: Frame
-	-- Options live in a scrolling body rather than directly in the popup. A plain
-	-- frame with AutomaticSize grows without limit, so a dropdown with twenty
-	-- values drew a list taller than the viewport. AutomaticSize plus a
-	-- UISizeConstraint caps the height and hands the overflow to the scrollbar,
-	-- which is the pattern Roblox's own layout docs recommend for long lists.
+
+	-- Long lists are unusable without a filter: a dropdown carrying every gun in
+	-- the game is a few hundred rows of scrolling. The box lives inside the popup,
+	-- so the filter belongs to the dropdown instead of costing the caller a
+	-- separate Textbox control in the section.
+	local searchBox: TextBox? = nil
+	if options.Searchable then
+		searchBox = create("TextBox", {
+			Name = "Search",
+			Size = UDim2.new(1, 0, 0, DROPDOWN_SEARCH_HEIGHT),
+			LayoutOrder = 1,
+			BackgroundColor3 = Theme.Selected,
+			BackgroundTransparency = 0.25,
+			BorderSizePixel = 0,
+			ClearTextOnFocus = false,
+			FontFace = Fonts.Mono,
+			PlaceholderText = options.SearchPlaceholder or "Search...",
+			PlaceholderColor3 = Theme.FaintText,
+			Text = "",
+			TextColor3 = Theme.Text,
+			TextSize = 13,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			ZIndex = 42,
+			Parent = list,
+		}, { corner(9), stroke(Theme.Border, Line.Inner, true), padding(0, 11, 0, 11) }) :: TextBox
+	end
+
+	-- Options live in a scrolling body rather than directly in the popup.
+	-- Both automatic modes are off and the numbers written by hand: AutomaticSize
+	-- plus a UISizeConstraint does not actually clamp, so a list of ~30 rows drew
+	-- taller than the viewport, and AutomaticCanvasSize is ignored while
+	-- AutomaticSize is set on the same frame, which left the canvas at zero — a
+	-- clipped list with a scrollbar that had nothing to scroll. `measureList`
+	-- writes both from the visible row count.
 	local listBody = create("ScrollingFrame", {
 		Name = "OptionList",
 		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 2,
+		AutomaticSize = Enum.AutomaticSize.None,
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
 		CanvasSize = UDim2.fromOffset(0, 0),
 		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = true,
+		Active = true,
 		ScrollBarThickness = 3,
 		ScrollBarImageColor3 = Theme.Border,
 		ScrollBarImageTransparency = 0.4,
@@ -2171,9 +2213,25 @@ function SectionMethods:AddDropdown(options: any)
 		ZIndex = 42,
 		Parent = list,
 	}, {
-		listLayout(4),
-		create("UISizeConstraint", { MaxSize = Vector2.new(math.huge, 246) }),
+		listLayout(DROPDOWN_OPTION_PADDING),
 	}) :: ScrollingFrame
+
+	-- Shown in place of the rows when the filter excludes everything. Leaving the
+	-- last matching list on screen reads as if the search did nothing.
+	local emptyLabel = label({
+		Name = "NoMatch",
+		Size = UDim2.new(1, 0, 0, DROPDOWN_OPTION_HEIGHT),
+		-- Last in the layout: option rows are ordered by their index.
+		LayoutOrder = 2147483647,
+		FontFace = Fonts.Medium,
+		Text = "No match",
+		TextColor3 = Theme.FaintText,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Visible = false,
+		ZIndex = 43,
+		Parent = listBody,
+	})
 	local control = { Type = "Dropdown", Value = options.Default or values[1], Values = values, Instance = row }
 	local window = self.Window
 	local popup = {}
@@ -2185,6 +2243,57 @@ function SectionMethods:AddDropdown(options: any)
 	-- Forward declared: control:Set is written above the row builder but has to
 	-- repaint the rows it created.
 	local repaintOptions: () -> ()
+	local searchQuery = ""
+
+	-- Height and canvas from the visible row count. Rows are a fixed height, so
+	-- this is exact the moment the rows exist, without waiting for a layout pass.
+	local function measureList()
+		local visible = 0
+		for _, entry in ipairs(optionRows) do
+			if entry.Button.Visible then
+				visible += 1
+			end
+		end
+		if visible == 0 then
+			visible = 1 -- the "no match" row occupies one slot
+		end
+		local content = visible * (DROPDOWN_OPTION_HEIGHT + DROPDOWN_OPTION_PADDING) - DROPDOWN_OPTION_PADDING
+		listBody.CanvasSize = UDim2.fromOffset(0, content)
+		listBody.Size = UDim2.new(1, 0, 0, math.min(content, DROPDOWN_MAX_LIST_HEIGHT))
+	end
+
+	-- `SearchKey` lets a caller make a row findable by more than its label — an
+	-- internal item name behind a display name, for instance. It is called once
+	-- per row when the row is built, not once per keystroke.
+	local function searchTextFor(value: any): string
+		local text = tostring(value)
+		if type(options.SearchKey) == "function" then
+			local ok, extra = pcall(options.SearchKey, value)
+			if ok and extra ~= nil then
+				text ..= "\0" .. tostring(extra)
+			end
+		end
+		return text:lower()
+	end
+
+	-- Searching hides rows instead of rebuilding them: UIListLayout skips invisible
+	-- children, so the list reflows for free and the row a click is travelling
+	-- towards is never destroyed under the cursor.
+	local function applyFilter()
+		local query = searchQuery:lower()
+		local matches = 0
+		for _, entry in ipairs(optionRows) do
+			local visible = query == ""
+				or string.find(entry.Search, query, 1, true) ~= nil
+			entry.Button.Visible = visible
+			if visible then
+				matches += 1
+			end
+		end
+		emptyLabel.Visible = matches == 0
+		emptyLabel.Text = if query == "" then "Empty" else ("No match for \"%s\""):format(searchQuery)
+		measureList()
+	end
 
 	local function positionList()
 		local anchor = dropdown.AbsolutePosition
@@ -2247,12 +2356,41 @@ function SectionMethods:AddDropdown(options: any)
 		if repaintOptions then
 			repaintOptions()
 		end
-		popup.Close()
+		-- Only a real pick closes the menu. A silent set is programmatic — a
+		-- Refresh restoring the selection, or a config being loaded — and closing
+		-- on those yanked an open list out from under the pointer.
 		if not silent then
+			popup.Close()
 			safeCallback(options.Callback, value)
 		end
 	end
 	function control:Refresh(newValues: {any}, keepValue: boolean?)
+		-- A rebuild destroys and recreates every row, so a rebuild that lands while
+		-- the list is open deletes the row the cursor is over and the click hits
+		-- nothing. Callers refreshing on an event that fires in bursts (an
+		-- inventory streaming in, say) hand over the same list nearly every time,
+		-- so an unchanged list costs nothing.
+		local unchanged = #newValues == #self.Values
+		if unchanged then
+			for index, value in ipairs(newValues) do
+				if self.Values[index] ~= value then
+					unchanged = false
+					break
+				end
+			end
+		end
+		if unchanged then
+			-- Values are equal but not the same table; keep the caller's.
+			self.Values = newValues
+			if not keepValue or not table.find(newValues, self.Value) then
+				local wanted = newValues[1]
+				if wanted ~= self.Value then
+					self:Set(wanted, true)
+				end
+			end
+			return
+		end
+
 		self.Values = newValues
 		-- Option rows own their own connection list. Pushing them into
 		-- window._connections left one dead entry per option per refresh, so a
@@ -2267,10 +2405,14 @@ function SectionMethods:AddDropdown(options: any)
 		if not keepValue or not table.find(newValues, self.Value) then
 			self.Value = newValues[1]
 		end
+		local scroll = listBody.CanvasPosition
 		self:_build()
 		if self.Value then
 			self:Set(self.Value, true)
 		end
+		-- Rebuilding resets the canvas; a list refreshed while open would otherwise
+		-- jump back to the top.
+		listBody.CanvasPosition = scroll
 	end
 	-- An option row was a bare TextButton whose only state was a slightly lighter
 	-- background on hover: nothing marked the current value, and every row carried
@@ -2311,7 +2453,7 @@ function SectionMethods:AddDropdown(options: any)
 		for index, value in ipairs(self.Values) do
 			local option = button({
 				Name = "Option",
-				Size = UDim2.new(1, 0, 0, 40),
+				Size = UDim2.new(1, 0, 0, DROPDOWN_OPTION_HEIGHT),
 				BackgroundColor3 = Theme.Selected,
 				BackgroundTransparency = 1,
 				Text = "",
@@ -2381,7 +2523,14 @@ function SectionMethods:AddDropdown(options: any)
 				Parent = check,
 			}, { corner(1) })
 
-			local entry = { Value = value, Button = option, Accent = accent, Label = optionLabel, Check = check }
+			local entry = {
+				Value = value,
+				Button = option,
+				Accent = accent,
+				Label = optionLabel,
+				Check = check,
+				Search = searchTextFor(value),
+			}
 			table.insert(optionRows, entry)
 			paintOption(entry, false)
 
@@ -2395,12 +2544,50 @@ function SectionMethods:AddDropdown(options: any)
 				control:Set(value)
 			end))
 		end
+		-- Rows start hidden or shown according to the search that is already in the
+		-- box, and the popup is sized from what survived it.
+		applyFilter()
 	end
 	control.Window = self.Window
 	control:_build()
 	if control.Value then
 		control:Set(control.Value, true)
 	end
+
+	-- Filters the list from code. Also the hook the search box uses, so typing and
+	-- setting the query end up in the same place.
+	function control:SetSearch(text: string?)
+		local query = tostring(text or "")
+		if query == searchQuery then
+			return
+		end
+		searchQuery = query
+		if searchBox and searchBox.Text ~= query then
+			searchBox.Text = query
+		end
+		applyFilter()
+		if list.Visible then
+			positionList()
+			-- The popup grows and shrinks with the filter, and a list anchored to
+			-- its bottom edge moves as it does. AbsoluteSize only catches up after
+			-- the layout pass, so the flip is decided again once it has.
+			task.defer(function()
+				if list.Visible then
+					positionList()
+				end
+			end)
+		end
+	end
+
+	if searchBox then
+		-- Text, not FocusLost: the list filters as the query is typed. The
+		-- connection lives on the window rather than on the option list, which is
+		-- torn down on every Refresh.
+		table.insert(window._connections, searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+			control:SetSearch(searchBox.Text)
+		end))
+	end
+
 	table.insert(window._connections, dropdown.MouseButton1Click:Connect(function()
 		if list.Visible then
 			popup.Close()

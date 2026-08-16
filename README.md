@@ -132,6 +132,28 @@ loaded as blanks.
   design canvas height minus a constant, which drifted at custom window sizes.
 - `Window:Destroy` tears down dropdown option connections, not just popups.
 
+`0.5.17` is a dropdown pass:
+
+- The option list is sized by hand instead of by `AutomaticSize` plus a
+  `UISizeConstraint`, which never actually clamped: a list of ~30 rows drew
+  taller than the viewport and ran off the top of the screen. `AutomaticCanvasSize`
+  was also ignored while `AutomaticSize` was set on the same frame, so the canvas
+  stayed at zero — the rows past the cut were unreachable behind a scrollbar with
+  nothing to scroll. Height and canvas now come from the visible row count, which
+  is exact as soon as the rows exist rather than a layout pass later.
+- `AddDropdown { Searchable = true }` puts a search box in the popup and filters
+  the list as you type. Filtering hides rows rather than rebuilding them, so the
+  row a click is travelling towards is never destroyed under the cursor.
+  `SearchPlaceholder` sets the placeholder text and `SearchKey(value) -> string`
+  adds text a row can be matched by beyond its label (an internal name behind a
+  display name). `Dropdown:SetSearch(text)` drives the same filter from code.
+- `Dropdown:Refresh` leaves an unchanged list standing. Callers refreshing on an
+  event that fires in bursts — an inventory streaming in — hand over the same
+  values nearly every time, and rebuilding on each one deleted the row under the
+  cursor, so the menu went dead. A real change keeps the scroll position.
+- A silent `Dropdown:Set` no longer closes the popup. Restoring the selection
+  after a refresh, or loading a config, yanked an open list shut.
+
 ## Current preview
 
 - Design canvas: `1280 x 760`
