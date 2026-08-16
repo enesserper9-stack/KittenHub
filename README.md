@@ -41,6 +41,23 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.6` is a correctness and cost pass:
+
+- `PageTitle` is no longer accepted and ignored. On `CreateWindow` it names the
+  landing page; `AddTab { PageTitle = ... }` overrides it per tab, and
+  `Tab:SetPageTitle(text)` changes it afterwards.
+- Sliders snap from `Min` rather than from zero (a `5..105` slider stepping by
+  `10` lands on 5, 15, 25) and the snapped value is rounded to the increment's
+  own decimal count, so `0.1` steps no longer print `0.30000000000000004`.
+- `Dropdown:Refresh` disconnects the option rows it destroys. Each dropdown owns
+  its option connections instead of appending dead entries to the window list.
+- Unloaded images share one watcher coroutine instead of one per icon (~60 idle
+  threads per window before), and entries drop as soon as the image loads or its
+  window is destroyed.
+- The content footer divider anchors to the panel's bottom edge instead of the
+  design canvas height minus a constant, which drifted at custom window sizes.
+- `Window:Destroy` tears down dropdown option connections, not just popups.
+
 ## Current preview
 
 - Design canvas: `1280 x 760`

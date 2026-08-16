@@ -42,7 +42,7 @@ assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulun
 -- leaves a window where this file already expects the newer version and the
 -- library does not have it yet. That mismatch is only worth a warning, since the
 -- previous library still runs. Upload both files in one commit to avoid it.
-local EXPECTED_VERSION = "0.5.5"
+local EXPECTED_VERSION = "0.5.6"
 if KittenHub.Version ~= EXPECTED_VERSION then
 	warn(
 		"[KittenHub Example] Surum uyusmazligi - beklenen: "
@@ -61,6 +61,8 @@ local Window = KittenHub:CreateWindow({
 	Icon = "rbxassetid://102065448126548",
 	Size = Vector2.new(1280, 760),
 	Scale = 0.78,
+	-- Heading for the landing page only. Later tabs use their own name, or their
+	-- own PageTitle when AddTab passes one.
 	PageTitle = "Home",
 	ToggleKey = Enum.KeyCode.RightShift,
 	Assets = {

@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.5"
+KittenHub.Version = "0.5.6"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -205,10 +205,16 @@ local function gradient(topColor: Color3, bottomColor: Color3, rotation: number?
 	}) :: UIGradient
 end
 
-local function dashedLine(parent: Instance, y: number, left: number, right: number, fallbackWidth: number)
+-- `y` is either an offset from the top of `parent`, or a UDim so the caller can
+-- anchor to the bottom edge. The content divider used to be placed at the design
+-- canvas height minus a constant, which drifted the moment a window was created
+-- with a custom Size.
+local function dashedLine(parent: Instance, y: number | UDim, left: number, right: number, fallbackWidth: number)
+	local offsetY: UDim = if typeof(y) == "UDim" then y else UDim.new(0, y :: number)
 	local holder = create("Frame", {
 		Name = "DashedDivider",
-		Position = UDim2.new(0, left, 0, y),
+		AnchorPoint = Vector2.new(0, offsetY.Scale),
+		Position = UDim2.new(0, left, offsetY.Scale, offsetY.Offset),
 		Size = UDim2.new(1, -(left + right), 0, 1),
 		BackgroundTransparency = 1,
 		LayoutOrder = 1,
@@ -353,6 +359,83 @@ local function queuePreload(instance: Instance, onSettled: () -> ())
 	end)
 end
 
+-- A window with four tabs creates ~60 icons. Giving each one its own polling
+-- coroutine meant 60 threads waking twice a second for the entire session, and
+-- none of them noticed a destroyed window until their next tick. One shared
+-- watcher walks the pending list instead, and drops entries whose image has
+-- loaded, been destroyed, or run past the give-up deadline.
+type FallbackEntry = {
+	Image: ImageLabel,
+	Fallback: TextLabel,
+	Id: string,
+	Start: number,
+}
+
+local pendingFallbacks: {FallbackEntry} = {}
+local fallbackWatcherRunning = false
+
+local function runFallbackWatcher()
+	if fallbackWatcherRunning then
+		return
+	end
+	fallbackWatcherRunning = true
+	task.spawn(function()
+		while #pendingFallbacks > 0 do
+			local now = os.clock()
+			-- Backwards so removal does not skip the next entry.
+			for index = #pendingFallbacks, 1, -1 do
+				local entry = pendingFallbacks[index]
+				local image = entry.Image
+				local done = false
+
+				if not image.Parent then
+					done = true
+				elseif image.IsLoaded then
+					if entry.Fallback.Parent then
+						entry.Fallback.Visible = false
+					end
+					done = true
+				else
+					local elapsed = now - entry.Start
+					if elapsed > FALLBACK_GLYPH_DELAY then
+						if entry.Fallback.Parent and not entry.Fallback.Visible then
+							entry.Fallback.Visible = true
+						end
+						if not warnedAssets[entry.Id] then
+							warnedAssets[entry.Id] = true
+							warn(
+								"[KittenHub] Image asset still not loaded after",
+								FALLBACK_GLYPH_DELAY .. "s:",
+								entry.Id,
+								"Check moderation and Asset Privacy/Open Use permissions."
+							)
+						end
+						if elapsed > FALLBACK_GIVE_UP then
+							done = true
+						end
+					end
+				end
+
+				if done then
+					table.remove(pendingFallbacks, index)
+				end
+			end
+			task.wait(0.5)
+		end
+		fallbackWatcherRunning = false
+	end)
+end
+
+local function watchFallback(image: ImageLabel, fallback: TextLabel, imageId: string)
+	table.insert(pendingFallbacks, {
+		Image = image,
+		Fallback = fallback,
+		Id = imageId,
+		Start = os.clock(),
+	})
+	runFallbackWatcher()
+end
+
 local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any}, imageId: string?, glyph: string): GuiObject
 	-- Work on a copy: the branches below strip keys, and mutating the caller's
 	-- table breaks any table that is reused for a second element.
@@ -414,35 +497,7 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		end
 		image:GetPropertyChangedSignal("IsLoaded"):Connect(hideFallbackIfLoaded)
 		queuePreload(image, hideFallbackIfLoaded)
-
-		task.spawn(function()
-			local start = os.clock()
-			while image.Parent do
-				if image.IsLoaded then
-					hideFallbackIfLoaded()
-					return
-				end
-				local elapsed = os.clock() - start
-				if elapsed > FALLBACK_GLYPH_DELAY then
-					if fallback.Parent and not fallback.Visible then
-						fallback.Visible = true
-					end
-					if not warnedAssets[imageId] then
-						warnedAssets[imageId] = true
-						warn(
-							"[KittenHub] Image asset still not loaded after",
-							FALLBACK_GLYPH_DELAY .. "s:",
-							imageId,
-							"Check moderation and Asset Privacy/Open Use permissions."
-						)
-					end
-					if elapsed > FALLBACK_GIVE_UP then
-						return
-					end
-				end
-				task.wait(elapsed > FALLBACK_GLYPH_DELAY and 2 or 0.5)
-			end
-		end)
+		watchFallback(image, fallback, imageId)
 		return image
 	end
 	properties.ImageTransparency = nil
@@ -523,6 +578,37 @@ local function button(properties: {[string]: any}, children: {Instance}?): TextB
 		defaults[key] = value
 	end
 	return create("TextButton", defaults, children) :: TextButton
+end
+
+-- Number of decimals written by the increment itself, used to scrub the binary
+-- float residue out of a snapped slider value (0.1 + 0.2 prints as
+-- 0.30000000000000004 otherwise). Reading it off tostring keeps 0.25 at two
+-- decimals, which a log10-based guess rounds down to 0.3.
+local function decimalPlaces(value: number): number
+	local text = tostring(value)
+	if string.find(text, "e", 1, true) or string.find(text, "inf", 1, true) then
+		return 0
+	end
+	local point = string.find(text, ".", 1, true)
+	if not point then
+		return 0
+	end
+	return #text - point
+end
+
+-- Steps are counted from `minimum`, not from zero: a 5..105 slider with a step of
+-- 10 must land on 5, 15, 25 and never on 10.
+local function snapToIncrement(value: number, minimum: number, increment: number): number
+	if increment <= 0 then
+		return value
+	end
+	local steps = math.floor(((value - minimum) / increment) + 0.5)
+	local snapped = minimum + (steps * increment)
+	local places = math.max(decimalPlaces(increment), decimalPlaces(minimum))
+	if places > 0 then
+		return tonumber(string.format("%." .. places .. "f", snapped)) or snapped
+	end
+	return snapped
 end
 
 local function tween(instance: Instance, duration: number, properties: {[string]: any})
@@ -1005,7 +1091,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 	-- No background pattern on the content panel. A dense page hides it entirely
 	-- while a sparse one (Settings, Players) leaves it stranded in open space, so
 	-- the texture only ever showed up as clutter on the emptier tabs.
-	local contentFooterLine = dashedLine(content, baseSize.Y - 120, 0, 0, 900)
+	local contentFooterLine = dashedLine(content, UDim.new(1, -30), 0, 0, 900)
 	spriteOrGlyph(contentFooterLine, {
 		Name = "FooterHeart",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -1076,6 +1162,9 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		_inputChanged = {},
 		_inputEnded = {},
 		_popups = {},
+		-- Default heading for a tab's page. `AddTab{ PageTitle = ... }` overrides it
+		-- per tab; without either the page keeps using the tab's own name.
+		PageTitle = options.PageTitle,
 		_baseSize = baseSize,
 		_designScale = math.clamp(designScale, 0.48, 1),
 		_uiScale = uiScale,
@@ -1393,6 +1482,9 @@ function WindowMethods:AddTab(options: any)
 	local tabIcon = options.Icon or "✦"
 	local tabIconRole = options.IconRole
 	local order = #self.Tabs + 1
+	-- The window level PageTitle names the landing page only. Applying it to every
+	-- tab would stamp the same heading ("Home") on all of them.
+	local pageTitle = options.PageTitle or (order == 1 and self.PageTitle) or tabName
 	local tabStroke = stroke(Theme.Border, 1)
 
 	local tabButton = button({
@@ -1469,13 +1561,13 @@ function WindowMethods:AddTab(options: any)
 		Position = UDim2.fromOffset(8, 0),
 		Size = UDim2.new(1, -220, 0, 58),
 		FontFace = Fonts.Display,
-		Text = tabName,
+		Text = pageTitle,
 		TextSize = 40,
 		Parent = pageHeader,
 	})
 	spriteOrGlyph(pageHeader, {
 		Name = "PageTitlePaw",
-		Position = UDim2.fromOffset(math.clamp((#tabName * 22) + 18, 160, 300), 11),
+		Position = UDim2.fromOffset(math.clamp((#pageTitle * 22) + 18, 160, 300), 11),
 		Size = UDim2.fromOffset(36, 36),
 		ImageTransparency = 0.08,
 		TextTransparency = 0.08,
@@ -1498,6 +1590,7 @@ function WindowMethods:AddTab(options: any)
 		Window = self,
 		Name = tabName,
 		Button = tabButton,
+		PageTitle = pageTitle,
 		Page = page,
 		Sections = {},
 		Order = order,
@@ -1558,7 +1651,15 @@ function WindowMethods:Destroy()
 		return
 	end
 	self._destroyed = true
-	self:ClosePopups()
+	-- Close is not enough: a dropdown also owns the connections behind its option
+	-- rows, which are not children of the window Gui's row hierarchy.
+	for _, popup in ipairs(self._popups) do
+		if popup.Destroy then
+			popup.Destroy()
+		else
+			popup.Close()
+		end
+	end
 	disconnectAll(self._connections)
 	table.clear(self._inputBegan)
 	table.clear(self._inputChanged)
@@ -1568,6 +1669,24 @@ function WindowMethods:Destroy()
 	if self.Gui then
 		self.Gui:Destroy()
 	end
+end
+
+function TabMethods:SetPageTitle(title: string)
+	self.PageTitle = title
+	local header = self.Page:FindFirstChild("PageHeader")
+	local heading = header and header:FindFirstChild("PageTitle") :: TextLabel?
+	if heading then
+		heading.Text = title
+	end
+	-- The decoration is two instances when an image is in play: the ImageLabel and
+	-- its "…Fallback" glyph twin, which both have to follow the heading.
+	local pawX = math.clamp((#title * 22) + 18, 160, 300)
+	for _, child in ipairs(header and header:GetChildren() or {}) do
+		if child:IsA("GuiObject") and string.find(child.Name, "PageTitlePaw", 1, true) == 1 then
+			child.Position = UDim2.fromOffset(pawX, 11)
+		end
+	end
+	return self
 end
 
 function TabMethods:AddSection(options: any)
@@ -1915,8 +2034,7 @@ function SectionMethods:AddSlider(options: any)
 	local dragging = false
 
 	function control:Set(value: number, silent: boolean?)
-		value = math.clamp(value, minimum, maximum)
-		value = math.floor((value / increment) + 0.5) * increment
+		value = math.clamp(snapToIncrement(math.clamp(value, minimum, maximum), minimum, increment), minimum, maximum)
 		self.Value = value
 		local alpha = maximum == minimum and 0 or (value - minimum) / (maximum - minimum)
 		fill.Size = UDim2.fromScale(alpha, 1)
@@ -2041,6 +2159,7 @@ function SectionMethods:AddDropdown(options: any)
 	local window = self.Window
 	local popup = {}
 	local trackConnection: RBXScriptConnection? = nil
+	local optionConnections: {RBXScriptConnection} = {}
 
 	local function positionList()
 		local anchor = dropdown.AbsolutePosition
@@ -2074,6 +2193,11 @@ function SectionMethods:AddDropdown(options: any)
 		end
 	end
 
+	function popup.Destroy()
+		popup.Close()
+		disconnectAll(optionConnections)
+	end
+
 	function popup.Open()
 		window:ClosePopups(popup)
 		list.Visible = true
@@ -2102,6 +2226,10 @@ function SectionMethods:AddDropdown(options: any)
 	end
 	function control:Refresh(newValues: {any}, keepValue: boolean?)
 		self.Values = newValues
+		-- Option rows own their own connection list. Pushing them into
+		-- window._connections left one dead entry per option per refresh, so a
+		-- dropdown refreshed on a loop grew that table without bound.
+		disconnectAll(optionConnections)
 		for _, child in ipairs(list:GetChildren()) do
 			if child:IsA("TextButton") then
 				child:Destroy()
@@ -2129,13 +2257,13 @@ function SectionMethods:AddDropdown(options: any)
 				ZIndex = 42,
 				Parent = list,
 			}, { corner(6), padding(0, 8, 0, 8) })
-			table.insert(control.Window._connections, option.MouseEnter:Connect(function()
+			table.insert(optionConnections, option.MouseEnter:Connect(function()
 				tween(option, 0.12, { BackgroundTransparency = 0.2 })
 			end))
-			table.insert(control.Window._connections, option.MouseLeave:Connect(function()
+			table.insert(optionConnections, option.MouseLeave:Connect(function()
 				tween(option, 0.12, { BackgroundTransparency = 1 })
 			end))
-			table.insert(control.Window._connections, option.MouseButton1Click:Connect(function()
+			table.insert(optionConnections, option.MouseButton1Click:Connect(function()
 				control:Set(value)
 			end))
 		end
