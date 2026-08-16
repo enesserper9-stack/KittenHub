@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.14"
+KittenHub.Version = "0.5.15"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -36,6 +36,16 @@ KittenHub.DefaultAssets = {
 	Shield = "rbxassetid://72509035967594",
 	Horse = "rbxassetid://99101952385157",
 	Gun = "rbxassetid://72587317513615",
+}
+
+-- Artwork is not drawn to a common margin: the later icons sit in a wider
+-- transparent border, so at the same label size their subject rendered visibly
+-- smaller than the cat and gear icons next to them. Scaling the label rather
+-- than the layout keeps every row and tab the same height.
+KittenHub.AssetScales = {
+	[KittenHub.DefaultAssets.CrossedRifles] = 1.45,
+	[KittenHub.DefaultAssets.Horse] = 1.45,
+	[KittenHub.DefaultAssets.Gun] = 1.45,
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
@@ -455,6 +465,10 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		properties.BackgroundTransparency = 1
 		properties.Parent = parent
 		local image = create("ImageLabel", properties) :: ImageLabel
+		local assetScale = KittenHub.AssetScales[imageId]
+		if assetScale then
+			create("UIScale", { Scale = assetScale, Parent = image })
+		end
 		local fallback = create("TextLabel", fallbackProperties) :: TextLabel
 
 		-- The ImageLabel is never hidden. Roblox only downloads an image once the
