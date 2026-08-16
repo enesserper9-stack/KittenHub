@@ -41,6 +41,14 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.10` opts out of automatic localization:
+
+- Every GUI object the library creates sets `AutoLocalize = false`. Roblox
+  translates in-experience text when the client's language differs from the
+  experience's, so a dropdown offering `Head` rendered as `Kafa` on a Turkish
+  client while the value behind it was still `Head`. Control names are part of
+  the API surface and must read the same on every client.
+
 `0.5.9` rebuilds the dropdown list:
 
 - Option rows were bare text with a hover tint and no marker for the current

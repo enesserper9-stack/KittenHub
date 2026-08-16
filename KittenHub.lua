@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.9"
+KittenHub.Version = "0.5.10"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -114,6 +114,14 @@ local Theme = {
 -- flicker and an extra layout pass for every created object.
 local function create(className: string, properties: {[string]: any}?, children: {Instance}?): Instance
 	local object = Instance.new(className)
+	-- Roblox's automatic localization rewrites GUI text whenever the client's
+	-- language differs from the experience's, and it does not know that these
+	-- strings are control names: a dropdown offering "Head" rendered as "Kafa" on
+	-- a Turkish client while the value behind it stayed "Head". Library text is
+	-- part of the API surface, so it opts out.
+	if object:IsA("GuiBase2d") then
+		(object :: any).AutoLocalize = false
+	end
 	local parent: Instance? = nil
 	for property, value in pairs(properties or {}) do
 		if property == "Parent" then
