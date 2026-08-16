@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.11"
+KittenHub.Version = "0.5.12"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -34,6 +34,7 @@ KittenHub.DefaultAssets = {
 	-- paw. Pass the role name as IconRole.
 	CrossedRifles = "rbxassetid://130005119002593",
 	Shield = "rbxassetid://140643139770186",
+	Horse = "rbxassetid://121393612342041",
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.

@@ -42,7 +42,7 @@ assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulun
 -- leaves a window where this file already expects the newer version and the
 -- library does not have it yet. That mismatch is only worth a warning, since the
 -- previous library still runs. Upload both files in one commit to avoid it.
-local EXPECTED_VERSION = "0.5.11"
+local EXPECTED_VERSION = "0.5.12"
 if KittenHub.Version ~= EXPECTED_VERSION then
 	warn(
 		"[KittenHub Example] Surum uyusmazligi - beklenen: "
