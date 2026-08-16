@@ -41,6 +41,8 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.13` adds the `Gun` icon role.
+
 `0.5.12` adds the `Horse` icon role.
 
 `0.5.11` adds alternate icon roles:
