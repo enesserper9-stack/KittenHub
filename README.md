@@ -41,6 +41,10 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.14` corrects the `Shield`, `Horse`, and `Gun` ids. The first upload of
+each pointed at the parent asset rather than its image dependency, so they
+loaded as blanks.
+
 `0.5.13` adds the `Gun` icon role.
 
 `0.5.12` adds the `Horse` icon role.
