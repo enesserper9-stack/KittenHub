@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.17"
+KittenHub.Version = "0.5.18"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -36,6 +36,7 @@ KittenHub.DefaultAssets = {
 	Shield = "rbxassetid://72509035967594",
 	Horse = "rbxassetid://99101952385157",
 	Gun = "rbxassetid://72587317513615",
+	Money = "rbxassetid://117009994405006",
 }
 
 -- Artwork is not drawn to a common margin: the later icons sit in a wider
@@ -46,6 +47,7 @@ KittenHub.AssetScales = {
 	[KittenHub.DefaultAssets.CrossedRifles] = 1.45,
 	[KittenHub.DefaultAssets.Horse] = 1.45,
 	[KittenHub.DefaultAssets.Gun] = 1.45,
+	[KittenHub.DefaultAssets.Money] = 1.45,
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
@@ -360,6 +362,31 @@ local function isRendered(element: GuiObject): boolean
 	return current ~= nil
 end
 
+-- Whether an image actually has pixels, which is not the same question as
+-- IsLoaded. Images that draw perfectly have been seen reporting IsLoaded = false
+-- for a whole session under some clients, and the watcher below took that as
+-- proof the asset had failed: after the delay it painted the fallback glyph over
+-- a fully rendered icon and never took it away again — the grey "^" sitting
+-- between the peek cat's eyes. ContentImageSize is filled in from the decoded
+-- image, so a non-zero size means the picture arrived whatever IsLoaded claims.
+-- Read through pcall: the property is missing on older clients, where this simply
+-- falls back to IsLoaded alone.
+local function imageHasContent(image: ImageLabel): boolean
+	if image.IsLoaded then
+		return true
+	end
+	local ok, size = pcall(function()
+		return image.ContentImageSize
+	end)
+	return ok and typeof(size) == "Vector2" and size.Magnitude > 0
+end
+
+-- How long a glyph may stay on screen before it is withdrawn for good. The glyph
+-- is a diagnostic, and a diagnostic that is wrong is worse than none: the console
+-- warning has already been written by then, so nothing is lost by clearing the
+-- speck off the interface.
+local FALLBACK_GLYPH_GIVE_UP = 30
+
 local function runFallbackWatcher()
 	if fallbackWatcherRunning then
 		return
@@ -376,7 +403,7 @@ local function runFallbackWatcher()
 
 				if not image.Parent then
 					done = true
-				elseif image.IsLoaded then
+				elseif imageHasContent(image) then
 					if entry.Fallback.Parent then
 						entry.Fallback.Visible = false
 					end
@@ -405,9 +432,17 @@ local function runFallbackWatcher()
 							)
 						end
 					end
-					-- No give-up deadline. Dropping the entry left the glyph painted on
-					-- top of the image for the rest of the session if the asset arrived
-					-- late, which is the grey speck sitting over a loaded icon.
+					-- Dropping the entry while the glyph is still SHOWING is what left a
+					-- speck painted over an icon that arrived late, so the deadline
+					-- takes the glyph away before it lets the entry go. Past this point
+					-- the signal has been unreadable for half a minute on a rendered
+					-- image, which says more about the signal than about the asset.
+					if elapsed > FALLBACK_GLYPH_GIVE_UP then
+						if entry.Fallback.Parent then
+							entry.Fallback.Visible = false
+						end
+						done = true
+					end
 				end
 
 				if done then
@@ -509,7 +544,7 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		-- is always withdrawn the moment the image does arrive. IsLoaded does not
 		-- dependably raise a changed event either, hence the poll alongside it.
 		local function hideFallbackIfLoaded()
-			if fallback.Parent and image.IsLoaded then
+			if fallback.Parent and imageHasContent(image) then
 				fallback.Visible = false
 			end
 		end
