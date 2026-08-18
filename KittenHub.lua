@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.18"
+KittenHub.Version = "0.5.19"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -301,6 +301,18 @@ local warnedAssets: {[string]: boolean} = {}
 
 local preloadCallbacks: {() -> ()} = {}
 
+-- What the engine itself said about each asset, keyed by content id. This is the
+-- only authoritative answer to "did the picture arrive": PreloadAsync reports a
+-- per-asset AssetFetchStatus through its callback whether or not the label ever
+-- rendered, whether or not IsLoaded flips, and whether or not ContentImageSize
+-- exists on the client. Everything else in this file is a guess next to it.
+local assetFetchStatus: {[string]: EnumItem} = {}
+
+local function fetchStatusSaysLoaded(imageId: string): boolean
+	local status = assetFetchStatus[imageId]
+	return status ~= nil and status == Enum.AssetFetchStatus.Success
+end
+
 -- PreloadAsync only returns once every asset in the batch has settled, so its
 -- completion is the reliable signal for "this image is done". ImageLabel.IsLoaded
 -- does not dependably raise a property changed event, which left glyph fallbacks
@@ -318,9 +330,21 @@ local function queuePreload(instance: Instance, onSettled: () -> ())
 			local callbacks = preloadCallbacks
 			preloadQueue = {}
 			preloadCallbacks = {}
-			pcall(function()
-				ContentProvider:PreloadAsync(batch)
+			-- The two-argument call reports each asset as it settles. Older clients
+			-- reject the callback, so a plain PreloadAsync is the fallback and the
+			-- status table simply stays empty there.
+			local reported = pcall(function()
+				ContentProvider:PreloadAsync(batch, function(contentId, status)
+					if type(contentId) == "string" then
+						assetFetchStatus[contentId] = status
+					end
+				end)
 			end)
+			if not reported then
+				pcall(function()
+					ContentProvider:PreloadAsync(batch)
+				end)
+			end
 			for _, callback in ipairs(callbacks) do
 				pcall(callback)
 			end
@@ -373,6 +397,11 @@ end
 -- falls back to IsLoaded alone.
 local function imageHasContent(image: ImageLabel): boolean
 	if image.IsLoaded then
+		return true
+	end
+	-- What ContentProvider reported for this exact asset, which is settled long
+	-- before any of the guesses below can tell one state from another.
+	if fetchStatusSaysLoaded(image.Image) then
 		return true
 	end
 	local ok, size = pcall(function()
