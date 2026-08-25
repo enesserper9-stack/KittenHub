@@ -558,28 +558,35 @@ local function imageOrGlyph(parent: Instance, sourceProperties: {[string]: any},
 		if assetScale then
 			create("UIScale", { Scale = assetScale, Parent = image })
 		end
-		local fallback = create("TextLabel", fallbackProperties) :: TextLabel
+		-- A caller that passes no glyph wants the icon or nothing at all. Building
+		-- the fallback anyway put a stray character on screen for as long as the
+		-- asset took to arrive, and the sidebar peek arrow was exactly that: an
+		-- empty-looking control that flashed a grey caret on every open.
+		if glyph and glyph ~= "" then
+			local fallback = create("TextLabel", fallbackProperties) :: TextLabel
 
-		-- The ImageLabel is never hidden. Roblox only downloads an image once the
-		-- label actually renders, so setting Visible = false while IsLoaded was
-		-- still false deadlocked it: invisible, therefore never fetched,
-		-- therefore never loaded. An unloaded label simply draws nothing, so
-		-- toggling the glyph behind it is enough.
-		-- Roblox does not download an image for a GUI that never renders, so an icon
-		-- on an unselected tab reports IsLoaded = false long after PreloadAsync has
-		-- returned for it. Revealing the glyph on that signal painted grey specks
-		-- over every tab the user had not opened yet. The glyph is therefore only
-		-- shown once an asset has stayed unloaded well past any normal fetch, and
-		-- is always withdrawn the moment the image does arrive. IsLoaded does not
-		-- dependably raise a changed event either, hence the poll alongside it.
-		local function hideFallbackIfLoaded()
-			if fallback.Parent and imageHasContent(image) then
-				fallback.Visible = false
+			-- The ImageLabel is never hidden. Roblox only downloads an image once
+			-- the label actually renders, so setting Visible = false while
+			-- IsLoaded was still false deadlocked it: invisible, therefore never
+			-- fetched, therefore never loaded. An unloaded label simply draws
+			-- nothing, so toggling the glyph behind it is enough.
+			-- Roblox does not download an image for a GUI that never renders, so an
+			-- icon on an unselected tab reports IsLoaded = false long after
+			-- PreloadAsync has returned for it. Revealing the glyph on that signal
+			-- painted grey specks over every tab the user had not opened yet. The
+			-- glyph is therefore only shown once an asset has stayed unloaded well
+			-- past any normal fetch, and is always withdrawn the moment the image
+			-- does arrive. IsLoaded does not dependably raise a changed event
+			-- either, hence the poll alongside it.
+			local function hideFallbackIfLoaded()
+				if fallback.Parent and imageHasContent(image) then
+					fallback.Visible = false
+				end
 			end
+			image:GetPropertyChangedSignal("IsLoaded"):Connect(hideFallbackIfLoaded)
+			queuePreload(image, hideFallbackIfLoaded)
+			watchFallback(image, fallback, imageId)
 		end
-		image:GetPropertyChangedSignal("IsLoaded"):Connect(hideFallbackIfLoaded)
-		queuePreload(image, hideFallbackIfLoaded)
-		watchFallback(image, fallback, imageId)
 		return image
 	end
 	properties.ImageTransparency = nil
@@ -1070,7 +1077,7 @@ function KittenHub:CreateWindow(options: {[string]: any}?)
 		ImageTransparency = 0,
 		TextTransparency = 0,
 		ZIndex = 5,
-	}, assets, "Peek", "^")
+	}, assets, "Peek", "")
 
 	create("Frame", {
 		Name = "SidebarDivider",
@@ -2180,7 +2187,7 @@ function SectionMethods:AddDropdown(options: any)
 		TextTransparency = 0,
 		TextSize = 18,
 		ZIndex = 8,
-	}, self.Window.Assets, dropdownCatRole, "^")
+	}, self.Window.Assets, dropdownCatRole, "")
 	local chevron = create("Frame", {
 		Name = "Chevron",
 		AnchorPoint = Vector2.new(1, 0.5),
