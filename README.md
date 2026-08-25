@@ -41,6 +41,9 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.20` adds the `MoneyBag` icon role, scaled like the other wide-margin
+artwork.
+
 `0.5.16` fixes where those scaled icons land. `UIScale` grows a label away from
 its `AnchorPoint`, and icon labels are positioned from their top left corner, so
 scaling in place shifted each one down and to the right. Scaled labels are

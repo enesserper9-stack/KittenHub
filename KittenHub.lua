@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.19"
+KittenHub.Version = "0.5.20"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -37,6 +37,7 @@ KittenHub.DefaultAssets = {
 	Horse = "rbxassetid://99101952385157",
 	Gun = "rbxassetid://72587317513615",
 	Money = "rbxassetid://117009994405006",
+	MoneyBag = "rbxassetid://117403966034571",
 }
 
 -- Artwork is not drawn to a common margin: the later icons sit in a wider
@@ -48,6 +49,7 @@ KittenHub.AssetScales = {
 	[KittenHub.DefaultAssets.Horse] = 1.45,
 	[KittenHub.DefaultAssets.Gun] = 1.45,
 	[KittenHub.DefaultAssets.Money] = 1.45,
+	[KittenHub.DefaultAssets.MoneyBag] = 1.45,
 }
 
 -- Roblox cannot load Real's bundled Geist/JetBrains Mono WOFF2 files directly.
