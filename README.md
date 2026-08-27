@@ -41,6 +41,11 @@ written, and reworks the window chrome:
 - Minimizing hides everything below the top bar instead of clipping it.
 - New `Unload` asset role, used as the row icon for the unload button.
 
+`0.5.21` adds the `Bear`, `Bison`, and `Gator` icon roles. They are drawn
+side-on and fill four fifths of their artwork horizontally, where the earlier
+wide-margin icons fill around two thirds, so they scale to `1.2` rather than
+`1.45` — at `1.45` the animals ran past the edges of the label.
+
 `0.5.20` adds the `MoneyBag` icon role, scaled like the other wide-margin
 artwork.
 
