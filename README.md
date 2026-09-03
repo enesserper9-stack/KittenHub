@@ -169,10 +169,15 @@ loaded as blanks.
   `BrickColor.palette(0..127)` read off the engine, so the set stays identical to
   Studio's and cannot drift from it. A generated black-to-white ramp sits under a
   divider as the bottom strip.
-- Roblox has no hexagon primitive, so each cell is a white hexagon sprite tinted
-  with `ImageColor3`. Upload `assets/hexagon.png` and paste its ID into the
-  `Hexagon` asset role. Without it the grid degrades to rounded squares rather
-  than disappearing, matching how every other sprite in the library falls back.
+- Roblox has no hexagon primitive and ships no hexagon sprite, so the mask is
+  drawn once at runtime into an `EditableImage` — a white hexagon whose alpha
+  carries the shape, tinted per cell with `ImageColor3`. Nothing has to be
+  uploaded. Setting the `Hexagon` asset role overrides it with a sprite of your
+  own (`assets/hexagon.png` is the same shape), and if neither is available the
+  grid degrades to rounded squares rather than disappearing.
+- Only hexagons interlock. The square fallback advances a full cell height per
+  row instead of three quarters of one, which is what left it with no visible
+  gaps between rows.
 - Hit testing does not give each cell a hitbox. Rectangular hitboxes over a
   hexagonal lattice overlap at the corners and steal each other's clicks, so the
   grid takes input on one transparent surface and resolves the cell by nearest

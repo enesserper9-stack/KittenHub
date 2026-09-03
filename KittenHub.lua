@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.6.0"
+KittenHub.Version = "0.6.1"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -2752,6 +2752,67 @@ local function hexToColor(text: string): Color3?
 	)
 end
 
+-- Roblox has no hexagon primitive and ships no hexagon sprite, and making every
+-- caller upload one just to see the grid is a bad trade. The mask is drawn once
+-- at runtime into an EditableImage instead: a white hexagon whose alpha carries
+-- the shape, so a cell is that one image tinted per colour.
+local HEX_MASK_WIDTH = 96
+local hexagonMaskContent: any = nil
+-- The EditableImage is held alongside its Content: nothing else references it
+-- once the Content is handed to an ImageLabel, and a collected image blanks
+-- every cell drawn from it.
+local hexagonMaskImage: any = nil
+local hexagonMaskDrawn = false
+
+local function hexagonMask(): any
+	if hexagonMaskDrawn then
+		return hexagonMaskContent
+	end
+	hexagonMaskDrawn = true
+	-- EditableImage is not on every client and Content.fromObject is newer still,
+	-- so a failure here has to leave the picker standing rather than error.
+	local ok = pcall(function()
+		local width = HEX_MASK_WIDTH
+		local height = math.round((width * 2) / math.sqrt(3))
+		local radius = height / 2
+		local centreX = width / 2
+		local image = game:GetService("AssetService"):CreateEditableImage({ Size = Vector2.new(width, height) })
+		local pixels = buffer.create(width * height * 4)
+		for y = 0, height - 1 do
+			for x = 0, width - 1 do
+				-- 3x3 supersampling: a hard inside test leaves the six diagonal edges
+				-- visibly stepped at the 26px these are drawn at.
+				local hits = 0
+				for sy = 0, 2 do
+					for sx = 0, 2 do
+						local px = math.abs((x + ((sx + 0.5) / 3)) - centreX)
+						local py = math.abs((y + ((sy + 0.5) / 3)) - radius)
+						-- Pointy top hexagon: vertical sides at +-width/2, and the slanted
+						-- edges closing linearly from the full radius at the centre line to
+						-- half of it at those sides.
+						if px <= centreX and py <= radius * (1 - (px / width)) then
+							hits += 1
+						end
+					end
+				end
+				local offset = ((y * width) + x) * 4
+				buffer.writeu8(pixels, offset, 255)
+				buffer.writeu8(pixels, offset + 1, 255)
+				buffer.writeu8(pixels, offset + 2, 255)
+				buffer.writeu8(pixels, offset + 3, math.round((hits / 9) * 255))
+			end
+		end
+		image:WritePixelsBuffer(Vector2.zero, Vector2.new(width, height), pixels)
+		hexagonMaskImage = image
+		hexagonMaskContent = Content.fromObject(image)
+	end)
+	if not ok then
+		hexagonMaskImage = nil
+		hexagonMaskContent = nil
+	end
+	return hexagonMaskContent
+end
+
 -- Pointy top hexagons: WIDTH is the flat to flat span, HEIGHT the point to point
 -- one at 2/sqrt(3) of it. A row advances only three quarters of a height because
 -- neighbouring rows interlock, and odd rows shift half a column into the notch.
@@ -2760,6 +2821,9 @@ local HEX_HEIGHT = 30
 local HEX_GAP = 2
 local HEX_STEP_X = HEX_WIDTH + HEX_GAP
 local HEX_STEP_Y = math.floor(HEX_HEIGHT * 0.75) + HEX_GAP
+-- Squares do not interlock, so the fallback grid has to advance a full height.
+-- Reusing the hexagon step overlapped every row by 6px and closed the gaps.
+local SQUARE_STEP_Y = HEX_HEIGHT + HEX_GAP
 local HEX_GREY_GAP = 18
 local PICKER_PADDING = 12
 local PICKER_FOOTER = 46
@@ -2804,11 +2868,24 @@ function SectionMethods:AddColorpicker(options: any)
 		Parent = swatch,
 	})
 
+	-- An explicitly supplied sprite wins, then the mask drawn at runtime. Only if
+	-- both are unavailable does the grid degrade to rounded squares, which is what
+	-- every other sprite in the library does when its asset is missing.
+	local suppliedHex = window.Assets.Hexagon
+	local hexImage = (type(suppliedHex) == "string" and suppliedHex ~= "") and suppliedHex or nil
+	local hexContent = hexImage == nil and hexagonMask() or nil
+	local useHex = hexImage ~= nil or hexContent ~= nil
+	local rimTransparency = useHex and "ImageTransparency" or "BackgroundTransparency"
+	local rimColor = useHex and "ImageColor3" or "BackgroundColor3"
+	local stepY = useHex and HEX_STEP_Y or SQUARE_STEP_Y
+	-- Only hexagons interlock; shifting square rows leaves a ragged edge.
+	local rowIndent = useHex and math.floor(HEX_STEP_X / 2) or 0
+
 	-- Every measurement below is derived from these, so a caller changing
 	-- `Columns` reshapes the whole popup without another number being touched.
 	local paletteRows = math.max(1, math.ceil(#colors / columns))
-	local gridWidth = (columns * HEX_STEP_X) + math.floor(HEX_STEP_X / 2)
-	local paletteHeight = ((paletteRows - 1) * HEX_STEP_Y) + HEX_HEIGHT
+	local gridWidth = (columns * HEX_STEP_X) + rowIndent
+	local paletteHeight = ((paletteRows - 1) * stepY) + HEX_HEIGHT
 	local greyTop = paletteHeight + HEX_GREY_GAP
 	local gridHeight = greyTop + HEX_HEIGHT
 	local panelWidth = gridWidth + (PICKER_PADDING * 2)
@@ -2853,14 +2930,6 @@ function SectionMethods:AddColorpicker(options: any)
 		Parent = grid,
 	})
 
-	-- Roblox has no hexagon primitive, so a white hexagon sprite is tinted per
-	-- cell. Without the asset the grid degrades to rounded squares instead of
-	-- disappearing, which is what every other sprite in the library does.
-	local hexAsset = window.Assets.Hexagon
-	local useHex = type(hexAsset) == "string" and hexAsset ~= ""
-	local rimTransparency = useHex and "ImageTransparency" or "BackgroundTransparency"
-	local rimColor = useHex and "ImageColor3" or "BackgroundColor3"
-
 	local cells: {{[string]: any}} = {}
 	local hoverCell: {[string]: any}? = nil
 
@@ -2879,14 +2948,22 @@ function SectionMethods:AddColorpicker(options: any)
 		if useHex then
 			local markerProps = table.clone(shared)
 			markerProps.Size = UDim2.fromOffset(HEX_WIDTH + 6, HEX_HEIGHT + 7)
-			markerProps.Image = hexAsset
+			if hexImage then
+				markerProps.Image = hexImage
+			else
+				markerProps.ImageContent = hexContent
+			end
 			markerProps.ImageColor3 = Theme.White
 			markerProps.ImageTransparency = 1
 			markerProps.ZIndex = 44
 			marker = create("ImageLabel", markerProps) :: GuiObject
 			local fillProps = table.clone(shared)
 			fillProps.Size = UDim2.fromOffset(HEX_WIDTH, HEX_HEIGHT)
-			fillProps.Image = hexAsset
+			if hexImage then
+				fillProps.Image = hexImage
+			else
+				fillProps.ImageContent = hexContent
+			end
 			fillProps.ImageColor3 = color
 			fillProps.ZIndex = 45
 			fill = create("ImageLabel", fillProps) :: GuiObject
@@ -2910,8 +2987,8 @@ function SectionMethods:AddColorpicker(options: any)
 		local slot = index - 1
 		local rowIndex = math.floor(slot / columns)
 		local columnIndex = slot % columns
-		local indent = (rowIndex % 2 == 1) and math.floor(HEX_STEP_X / 2) or 0
-		addCell(color, (columnIndex * HEX_STEP_X) + indent, rowIndex * HEX_STEP_Y)
+		local indent = (rowIndex % 2 == 1) and rowIndent or 0
+		addCell(color, (columnIndex * HEX_STEP_X) + indent, rowIndex * stepY)
 	end
 	for index, color in ipairs(greys) do
 		addCell(color, (index - 1) * HEX_STEP_X, greyTop)
