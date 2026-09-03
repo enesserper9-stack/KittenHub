@@ -42,7 +42,7 @@ assert(type(KittenHub.CreateWindow) == "function", "KittenHub.CreateWindow bulun
 -- leaves a window where this file already expects the newer version and the
 -- library does not have it yet. That mismatch is only worth a warning, since the
 -- previous library still runs. Upload both files in one commit to avoid it.
-local EXPECTED_VERSION = "0.5.16"
+local EXPECTED_VERSION = "0.6.0"
 if KittenHub.Version ~= EXPECTED_VERSION then
 	warn(
 		"[KittenHub Example] Surum uyusmazligi - beklenen: "
@@ -83,6 +83,9 @@ local Window = KittenHub:CreateWindow({
 		Bell = "rbxassetid://80479928306450",
 		Unload = "rbxassetid://93174476369835",
 		ToggleUI = "rbxassetid://94264300792153",
+		-- Upload assets/hexagon.png and paste its ID to get the Studio style
+		-- hexagon grid. Left out, colourpickers fall back to rounded squares.
+		-- Hexagon = "rbxassetid://",
 	},
 })
 
@@ -158,6 +161,16 @@ Controls:AddDropdown({
 	Flag = "ExampleSearchDropdown",
 	Callback = function(value)
 		print("Searchable dropdown:", value)
+	end,
+})
+
+Controls:AddColorpicker({
+	Text = "Example Colorpicker",
+	Description = "BrickColor's 128 colour palette on a hexagonal grid.",
+	Default = Color3.fromRGB(255, 59, 48),
+	Flag = "ExampleColor",
+	Callback = function(value)
+		print("Color:", value)
 	end,
 })
 

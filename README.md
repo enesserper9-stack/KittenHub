@@ -162,6 +162,29 @@ loaded as blanks.
 - A silent `Dropdown:Set` no longer closes the popup. Restoring the selection
   after a refresh, or loading a config, yanked an open list shut.
 
+`0.6.0` adds a colourpicker:
+
+- `Section:AddColorpicker` opens a hexagonal palette popup modelled on Studio's
+  colour picker. The colours are not a hand written table: they are
+  `BrickColor.palette(0..127)` read off the engine, so the set stays identical to
+  Studio's and cannot drift from it. A generated black-to-white ramp sits under a
+  divider as the bottom strip.
+- Roblox has no hexagon primitive, so each cell is a white hexagon sprite tinted
+  with `ImageColor3`. Upload `assets/hexagon.png` and paste its ID into the
+  `Hexagon` asset role. Without it the grid degrades to rounded squares rather
+  than disappearing, matching how every other sprite in the library falls back.
+- Hit testing does not give each cell a hitbox. Rectangular hitboxes over a
+  hexagonal lattice overlap at the corners and steal each other's clicks, so the
+  grid takes input on one transparent surface and resolves the cell by nearest
+  centre: the Voronoi cells of a hexagonal lattice are exactly its hexagons, so
+  the nearest centre is the hexagon the point falls in. A circumradius cap
+  rejects clicks that land in the padding instead of snapping them to an edge
+  cell.
+- `Columns` (default 12) reshapes the grid; every other measurement, including
+  the popup size, is derived from it. `Default` and `Set` take a `Color3` or a
+  hex string, and the popup footer carries a `RRGGBB` box that accepts three
+  digit shorthand.
+
 ## Current preview
 
 - Design canvas: `1280 x 760`
@@ -175,7 +198,7 @@ loaded as blanks.
 - Fredoka One display headings, Builder Sans body text, and Builder Mono technical controls
 - Window dragging, minimize, recenter, close, and RightShift visibility toggle
 - Tabs and sections
-- Label, button, toggle, slider, dropdown, textbox, and keybind controls
+- Label, button, toggle, slider, dropdown, textbox, keybind, and colourpicker controls
 - Notification system
 - Flag lookup and connection cleanup
 
@@ -187,6 +210,7 @@ loaded as blanks.
 - `assets/icon-home.png`, `icon-plus.png`, `icon-players.png`,
   `icon-settings.png`, and `icon-bell.png` — separate menu/control icons
 - `assets/dark-cat-visible.png` — higher-contrast replacement for the dark cat
+- `assets/hexagon.png` — white pointy-top hexagon mask tinted per colourpicker cell
 
 Upload every PNG in `assets` through Roblox Studio's Asset Manager.
 Copy each image dependency/texture ID into the matching `Assets` entry. Every
@@ -234,6 +258,8 @@ local Window = KittenHub:CreateWindow({
         Players = "rbxassetid://125376145853165",
         Settings = "rbxassetid://87200505076227",
         Bell = "rbxassetid://80479928306450",
+        -- Upload assets/hexagon.png for the colourpicker grid.
+        Hexagon = "rbxassetid://",
     },
 })
 
@@ -246,6 +272,16 @@ Section:AddToggle({
     Flag = "ToggleFlag",
     Callback = function(value)
         print(value)
+    end,
+})
+
+Section:AddColorpicker({
+    Text = "Highlight Color",
+    Default = Color3.fromRGB(255, 59, 48),
+    Columns = 12,
+    Flag = "ColorFlag",
+    Callback = function(color)
+        print(color)
     end,
 })
 ```

@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.5.21"
+KittenHub.Version = "0.6.0"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -2695,6 +2695,450 @@ function SectionMethods:AddDropdown(options: any)
 		end
 	end)
 
+	return registerFlag(self, options.Flag, control)
+end
+
+-- Studio's colour grid is BrickColor's own 128 entry palette. Reading it off the
+-- engine keeps the set identical to Studio's instead of a copy that drifts.
+local function palette128(): {Color3}
+	local colors: {Color3} = {}
+	for index = 0, 127 do
+		local ok, brick = pcall(BrickColor.palette, index)
+		if ok and brick then
+			table.insert(colors, brick.Color)
+		end
+	end
+	return colors
+end
+
+-- Bottom strip of the Studio picker. The palette samples only a few greys, so
+-- the ramp is generated rather than filtered out of it.
+local function greyRamp(count: number): {Color3}
+	local colors: {Color3} = {}
+	for index = 0, count - 1 do
+		local level = count <= 1 and 0 or index / (count - 1)
+		table.insert(colors, Color3.new(level, level, level))
+	end
+	return colors
+end
+
+local function colorToHex(color: Color3): string
+	return string.format(
+		"%02X%02X%02X",
+		math.clamp(math.round(color.R * 255), 0, 255),
+		math.clamp(math.round(color.G * 255), 0, 255),
+		math.clamp(math.round(color.B * 255), 0, 255)
+	)
+end
+
+local function hexToColor(text: string): Color3?
+	local digits = string.gsub(string.upper(text), "[^0-9A-F]", "")
+	-- Three digit shorthand is what people paste out of CSS; expand it rather
+	-- than reject it.
+	if #digits == 3 then
+		digits = string.gsub(digits, "(.)", "%1%1")
+	end
+	if #digits ~= 6 then
+		return nil
+	end
+	local value = tonumber(digits, 16)
+	if not value then
+		return nil
+	end
+	return Color3.fromRGB(
+		bit32.band(bit32.rshift(value, 16), 255),
+		bit32.band(bit32.rshift(value, 8), 255),
+		bit32.band(value, 255)
+	)
+end
+
+-- Pointy top hexagons: WIDTH is the flat to flat span, HEIGHT the point to point
+-- one at 2/sqrt(3) of it. A row advances only three quarters of a height because
+-- neighbouring rows interlock, and odd rows shift half a column into the notch.
+local HEX_WIDTH = 26
+local HEX_HEIGHT = 30
+local HEX_GAP = 2
+local HEX_STEP_X = HEX_WIDTH + HEX_GAP
+local HEX_STEP_Y = math.floor(HEX_HEIGHT * 0.75) + HEX_GAP
+local HEX_GREY_GAP = 18
+local PICKER_PADDING = 12
+local PICKER_FOOTER = 46
+
+function SectionMethods:AddColorpicker(options: any)
+	options = options or {}
+	local text = options.Text or "Color"
+	local window = self.Window
+	local columns = math.max(2, options.Columns or 12)
+	local colors = palette128()
+	local greys = greyRamp(columns)
+	local row = controlRow(self, options.Description and 86 or 72, text, options.Description, options.IconRole or "Sparkles")
+
+	local swatch = button({
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -5, 0.5, 0),
+		Size = UDim2.fromOffset(178, 52),
+		BackgroundColor3 = Theme.Selected,
+		BackgroundTransparency = 0,
+		Parent = row,
+	}, {
+		corner(12),
+		stroke(Theme.Border, Line.Control, true),
+		gradient(Color3.fromRGB(74, 75, 82), Color3.fromRGB(41, 42, 47), 105),
+	})
+	local swatchFill = create("Frame", {
+		Name = "Fill",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 8, 0.5, 0),
+		Size = UDim2.fromOffset(36, 36),
+		BackgroundColor3 = Theme.White,
+		BorderSizePixel = 0,
+		Parent = swatch,
+	}, { corner(9), stroke(Theme.Border, Line.Inner, true) }) :: Frame
+	local swatchHex = label({
+		Name = "Hex",
+		Position = UDim2.fromOffset(54, 0),
+		Size = UDim2.new(1, -66, 1, 0),
+		FontFace = Fonts.Mono,
+		Text = "#FFFFFF",
+		TextSize = 15,
+		Parent = swatch,
+	})
+
+	-- Every measurement below is derived from these, so a caller changing
+	-- `Columns` reshapes the whole popup without another number being touched.
+	local paletteRows = math.max(1, math.ceil(#colors / columns))
+	local gridWidth = (columns * HEX_STEP_X) + math.floor(HEX_STEP_X / 2)
+	local paletteHeight = ((paletteRows - 1) * HEX_STEP_Y) + HEX_HEIGHT
+	local greyTop = paletteHeight + HEX_GREY_GAP
+	local gridHeight = greyTop + HEX_HEIGHT
+	local panelWidth = gridWidth + (PICKER_PADDING * 2)
+	local panelHeight = gridHeight + (PICKER_PADDING * 2) + PICKER_FOOTER
+
+	-- Same reason as the dropdown list: Content and the page ScrollingFrame both
+	-- clip, so an in-row popup is cut off whatever its ZIndex is.
+	local panelScale = create("UIScale", { Scale = 1 }) :: UIScale
+	local panel = create("Frame", {
+		Name = "ColorPalette",
+		AnchorPoint = Vector2.new(0, 0),
+		Size = UDim2.fromOffset(panelWidth, panelHeight),
+		BackgroundColor3 = Theme.SurfaceHover,
+		BorderSizePixel = 0,
+		Visible = false,
+		ZIndex = 41,
+		Parent = window.Overlay,
+	}, {
+		panelScale,
+		corner(12),
+		stroke(Theme.Border, Line.Popup, true),
+		gradient(Color3.fromRGB(68, 69, 76), Color3.fromRGB(38, 39, 44), 105),
+	}) :: Frame
+
+	local grid = create("Frame", {
+		Name = "Grid",
+		Position = UDim2.fromOffset(PICKER_PADDING, PICKER_PADDING),
+		Size = UDim2.fromOffset(gridWidth, gridHeight),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 43,
+		Parent = panel,
+	}) :: Frame
+	create("Frame", {
+		Name = "GreyDivider",
+		Position = UDim2.fromOffset(0, paletteHeight + math.floor(HEX_GREY_GAP / 2)),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = Theme.Divider,
+		BackgroundTransparency = 0.35,
+		BorderSizePixel = 0,
+		ZIndex = 43,
+		Parent = grid,
+	})
+
+	-- Roblox has no hexagon primitive, so a white hexagon sprite is tinted per
+	-- cell. Without the asset the grid degrades to rounded squares instead of
+	-- disappearing, which is what every other sprite in the library does.
+	local hexAsset = window.Assets.Hexagon
+	local useHex = type(hexAsset) == "string" and hexAsset ~= ""
+	local rimTransparency = useHex and "ImageTransparency" or "BackgroundTransparency"
+	local rimColor = useHex and "ImageColor3" or "BackgroundColor3"
+
+	local cells: {{[string]: any}} = {}
+	local hoverCell: {[string]: any}? = nil
+
+	local function addCell(color: Color3, left: number, top: number)
+		local centreX = left + (HEX_WIDTH / 2)
+		local centreY = top + (HEX_HEIGHT / 2)
+		local shared = {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(centreX, centreY),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Parent = grid,
+		}
+		local marker: GuiObject
+		local fill: GuiObject
+		if useHex then
+			local markerProps = table.clone(shared)
+			markerProps.Size = UDim2.fromOffset(HEX_WIDTH + 6, HEX_HEIGHT + 7)
+			markerProps.Image = hexAsset
+			markerProps.ImageColor3 = Theme.White
+			markerProps.ImageTransparency = 1
+			markerProps.ZIndex = 44
+			marker = create("ImageLabel", markerProps) :: GuiObject
+			local fillProps = table.clone(shared)
+			fillProps.Size = UDim2.fromOffset(HEX_WIDTH, HEX_HEIGHT)
+			fillProps.Image = hexAsset
+			fillProps.ImageColor3 = color
+			fillProps.ZIndex = 45
+			fill = create("ImageLabel", fillProps) :: GuiObject
+		else
+			local markerProps = table.clone(shared)
+			markerProps.Size = UDim2.fromOffset(HEX_WIDTH + 6, HEX_HEIGHT + 7)
+			markerProps.BackgroundColor3 = Theme.White
+			markerProps.ZIndex = 44
+			marker = create("Frame", markerProps, { corner(7) }) :: GuiObject
+			local fillProps = table.clone(shared)
+			fillProps.Size = UDim2.fromOffset(HEX_WIDTH, HEX_HEIGHT)
+			fillProps.BackgroundColor3 = color
+			fillProps.BackgroundTransparency = 0
+			fillProps.ZIndex = 45
+			fill = create("Frame", fillProps, { corner(6) }) :: GuiObject
+		end
+		table.insert(cells, { Color = color, Fill = fill, Marker = marker, CentreX = centreX, CentreY = centreY })
+	end
+
+	for index, color in ipairs(colors) do
+		local slot = index - 1
+		local rowIndex = math.floor(slot / columns)
+		local columnIndex = slot % columns
+		local indent = (rowIndex % 2 == 1) and math.floor(HEX_STEP_X / 2) or 0
+		addCell(color, (columnIndex * HEX_STEP_X) + indent, rowIndex * HEX_STEP_Y)
+	end
+	for index, color in ipairs(greys) do
+		addCell(color, (index - 1) * HEX_STEP_X, greyTop)
+	end
+
+	local previewFill = create("Frame", {
+		Name = "Preview",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, PICKER_PADDING, 1, -PICKER_PADDING),
+		Size = UDim2.fromOffset(34, 30),
+		BackgroundColor3 = Theme.White,
+		BorderSizePixel = 0,
+		ZIndex = 43,
+		Parent = panel,
+	}, { corner(9), stroke(Theme.Border, Line.Inner, true) }) :: Frame
+	local hexBox = create("TextBox", {
+		Name = "HexInput",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, PICKER_PADDING + 42, 1, -PICKER_PADDING),
+		Size = UDim2.new(1, -(PICKER_PADDING * 2) - 42, 0, 30),
+		BackgroundColor3 = Theme.Selected,
+		BackgroundTransparency = 0.25,
+		BorderSizePixel = 0,
+		ClearTextOnFocus = false,
+		FontFace = Fonts.Mono,
+		PlaceholderText = "RRGGBB",
+		PlaceholderColor3 = Theme.FaintText,
+		Text = "FFFFFF",
+		TextColor3 = Theme.Text,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		ZIndex = 43,
+		Parent = panel,
+	}, { corner(9), stroke(Theme.Border, Line.Inner, true), padding(0, 11, 0, 11) }) :: TextBox
+
+	local control = { Type = "Colorpicker", Value = Color3.fromRGB(255, 255, 255), Instance = row }
+	local popup = {}
+	local trackConnection: RBXScriptConnection? = nil
+
+	local function repaintCells()
+		for _, cell in ipairs(cells) do
+			local selected = cell.Color == control.Value
+			if selected then
+				cell.Marker[rimColor] = Theme.White
+				cell.Marker[rimTransparency] = 0
+			elseif cell == hoverCell then
+				cell.Marker[rimColor] = Theme.MutedText
+				cell.Marker[rimTransparency] = 0.45
+			else
+				cell.Marker[rimTransparency] = 1
+			end
+		end
+	end
+
+	function control:Set(value: any, silent: boolean?)
+		local color: Color3? = nil
+		if typeof(value) == "Color3" then
+			color = value
+		elseif type(value) == "string" then
+			color = hexToColor(value)
+		end
+		if not color then
+			return
+		end
+		self.Value = color
+		local hex = colorToHex(color)
+		swatchFill.BackgroundColor3 = color
+		swatchHex.Text = "#" .. hex
+		previewFill.BackgroundColor3 = color
+		if not hexBox:IsFocused() then
+			hexBox.Text = hex
+		end
+		repaintCells()
+		-- A silent set is programmatic (a config load, a Default being applied);
+		-- closing the popup on those yanks the grid out from under the pointer.
+		if not silent then
+			popup.Close()
+			safeCallback(options.Callback, color)
+		end
+	end
+	function control:OnChanged(callback)
+		options.Callback = callback
+		return self
+	end
+
+	-- The Voronoi cells of a hexagonal lattice ARE its hexagons, so the nearest
+	-- centre is exactly the hexagon a point falls in. That replaces both the
+	-- axial coordinate inverse and the row of overlapping rectangular hitboxes
+	-- that would otherwise steal each other's corners. The circumradius cap
+	-- rejects clicks that land in the padding rather than snapping them.
+	local hitRadius = HEX_HEIGHT / 2
+
+	local function cellAtPosition(position: Vector2)
+		local scale = panelScale.Scale
+		if scale <= 0 then
+			return nil
+		end
+		local localX = (position.X - grid.AbsolutePosition.X) / scale
+		local localY = (position.Y - grid.AbsolutePosition.Y) / scale
+		local best, bestDistance = nil, math.huge
+		for _, cell in ipairs(cells) do
+			local dx = localX - cell.CentreX
+			local dy = localY - cell.CentreY
+			local distance = (dx * dx) + (dy * dy)
+			if distance < bestDistance then
+				best, bestDistance = cell, distance
+			end
+		end
+		if best and bestDistance <= (hitRadius * hitRadius) then
+			return best
+		end
+		return nil
+	end
+
+	-- Cells are decorative; one transparent surface above them takes every input
+	-- so hit testing stays in the maths above.
+	local surface = button({
+		Name = "Surface",
+		Position = UDim2.fromOffset(PICKER_PADDING, PICKER_PADDING),
+		Size = UDim2.fromOffset(gridWidth, gridHeight),
+		BackgroundTransparency = 1,
+		ZIndex = 46,
+		Parent = panel,
+	})
+
+	local function positionPanel()
+		local anchor = swatch.AbsolutePosition
+		local anchorSize = swatch.AbsoluteSize
+		local scale = window._uiScale.Scale
+		panelScale.Scale = scale
+
+		local camera = workspace.CurrentCamera
+		local viewportHeight = camera and camera.ViewportSize.Y or 0
+		local viewportWidth = camera and camera.ViewportSize.X or 0
+		local panelPixelHeight = panelHeight * scale
+		local panelPixelWidth = panelWidth * scale
+		-- Right aligned to the swatch: the grid is wider than the control, so
+		-- left aligning pushed it off the right edge of the window.
+		local left = (anchor.X + anchorSize.X) - panelPixelWidth
+		if viewportWidth > 0 then
+			left = math.clamp(left, 8, math.max(8, viewportWidth - panelPixelWidth - 8))
+		end
+		local spaceBelow = viewportHeight - (anchor.Y + anchorSize.Y)
+		if viewportHeight > 0 and spaceBelow < panelPixelHeight + (14 * scale) then
+			panel.AnchorPoint = Vector2.new(0, 1)
+			panel.Position = UDim2.fromOffset(left, anchor.Y - (8 * scale))
+		else
+			panel.AnchorPoint = Vector2.new(0, 0)
+			panel.Position = UDim2.fromOffset(left, anchor.Y + anchorSize.Y + (8 * scale))
+		end
+	end
+
+	function popup.Close()
+		if not panel.Visible then
+			return
+		end
+		panel.Visible = false
+		hoverCell = nil
+		repaintCells()
+		if trackConnection then
+			trackConnection:Disconnect()
+			trackConnection = nil
+		end
+	end
+
+	function popup.Destroy()
+		popup.Close()
+	end
+
+	function popup.Open()
+		window:ClosePopups(popup)
+		panel.Visible = true
+		positionPanel()
+		-- Scrolling the page or dragging the window moves the swatch; follow it.
+		trackConnection = swatch:GetPropertyChangedSignal("AbsolutePosition"):Connect(positionPanel)
+		task.defer(function()
+			if panel.Visible then
+				positionPanel()
+			end
+		end)
+	end
+
+	table.insert(window._popups, popup)
+
+	table.insert(window._connections, swatch.MouseButton1Click:Connect(function()
+		if panel.Visible then
+			popup.Close()
+		else
+			popup.Open()
+		end
+	end))
+	table.insert(window._connections, surface.InputBegan:Connect(function(input)
+		if not isPressInput(input) then
+			return
+		end
+		local cell = cellAtPosition(Vector2.new(input.Position.X, input.Position.Y))
+		if cell then
+			control:Set(cell.Color)
+		end
+	end))
+	table.insert(window._connections, surface.InputChanged:Connect(function(input)
+		if not isMoveInput(input) then
+			return
+		end
+		local cell = cellAtPosition(Vector2.new(input.Position.X, input.Position.Y))
+		if cell ~= hoverCell then
+			hoverCell = cell
+			repaintCells()
+		end
+	end))
+	table.insert(window._connections, surface.MouseLeave:Connect(function()
+		if hoverCell then
+			hoverCell = nil
+			repaintCells()
+		end
+	end))
+	table.insert(window._connections, hexBox.FocusLost:Connect(function()
+		local color = hexToColor(hexBox.Text)
+		if color then
+			control:Set(color)
+		else
+			-- Reject rather than leave half typed text sitting on screen.
+			hexBox.Text = colorToHex(control.Value)
+		end
+	end))
+
+	control:Set(options.Default or Color3.fromRGB(255, 255, 255), true)
 	return registerFlag(self, options.Flag, control)
 end
 
