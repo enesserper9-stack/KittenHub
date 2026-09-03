@@ -10,7 +10,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local LocalPlayer = Players.LocalPlayer
 
 local KittenHub = {}
-KittenHub.Version = "0.6.1"
+KittenHub.Version = "0.6.2"
 KittenHub.AssetId = "rbxassetid://102065448126548"
 KittenHub.DefaultAssets = {
 	Logo = "rbxassetid://102065448126548",
@@ -2764,7 +2764,12 @@ local hexagonMaskContent: any = nil
 local hexagonMaskImage: any = nil
 local hexagonMaskDrawn = false
 
-local function hexagonMask(): any
+-- `parent` is the ScreenGui the cells will actually live in. It matters: an
+-- EditableImage is created without complaint inside the executor's hidden UI
+-- container (gethui/CoreGui) but never loads there, while an uploaded asset
+-- does. Assigning it blind drew 128 invisible cells, so the content is probed
+-- where it will be used and thrown away when it does not come up.
+local function hexagonMask(parent: Instance?): any
 	if hexagonMaskDrawn then
 		return hexagonMaskContent
 	end
@@ -2803,8 +2808,27 @@ local function hexagonMask(): any
 			end
 		end
 		image:WritePixelsBuffer(Vector2.zero, Vector2.new(width, height), pixels)
-		hexagonMaskImage = image
-		hexagonMaskContent = Content.fromObject(image)
+		local content = Content.fromObject(image)
+
+		local probe = create("ImageLabel", {
+			Name = "HexagonProbe",
+			Size = UDim2.fromOffset(1, 1),
+			BackgroundTransparency = 1,
+			ImageTransparency = 1,
+			ImageContent = content,
+			Parent = parent,
+		}) :: ImageLabel
+		-- Bounded, and only ever paid once per library load.
+		local deadline = os.clock() + 0.35
+		while not probe.IsLoaded and os.clock() < deadline do
+			task.wait()
+		end
+		local loaded = probe.IsLoaded
+		probe:Destroy()
+		if loaded then
+			hexagonMaskImage = image
+			hexagonMaskContent = content
+		end
 	end)
 	if not ok then
 		hexagonMaskImage = nil
@@ -2873,7 +2897,7 @@ function SectionMethods:AddColorpicker(options: any)
 	-- every other sprite in the library does when its asset is missing.
 	local suppliedHex = window.Assets.Hexagon
 	local hexImage = (type(suppliedHex) == "string" and suppliedHex ~= "") and suppliedHex or nil
-	local hexContent = hexImage == nil and hexagonMask() or nil
+	local hexContent = hexImage == nil and hexagonMask(window.Gui) or nil
 	local useHex = hexImage ~= nil or hexContent ~= nil
 	local rimTransparency = useHex and "ImageTransparency" or "BackgroundTransparency"
 	local rimColor = useHex and "ImageColor3" or "BackgroundColor3"

@@ -169,12 +169,16 @@ loaded as blanks.
   `BrickColor.palette(0..127)` read off the engine, so the set stays identical to
   Studio's and cannot drift from it. A generated black-to-white ramp sits under a
   divider as the bottom strip.
-- Roblox has no hexagon primitive and ships no hexagon sprite, so the mask is
-  drawn once at runtime into an `EditableImage` — a white hexagon whose alpha
-  carries the shape, tinted per cell with `ImageColor3`. Nothing has to be
-  uploaded. Setting the `Hexagon` asset role overrides it with a sprite of your
-  own (`assets/hexagon.png` is the same shape), and if neither is available the
-  grid degrades to rounded squares rather than disappearing.
+- Roblox has no hexagon primitive and ships no hexagon sprite, so each cell is a
+  white hexagon tinted with `ImageColor3`. **Upload `assets/hexagon.png` and put
+  its ID in the `Hexagon` asset role** to get the hexagonal grid.
+- A mask drawn at runtime into an `EditableImage` is tried when no sprite is
+  supplied, but it only works when the UI lives in `PlayerGui`. KittenHub parents
+  itself to `gethui()`/`CoreGui`, and an EditableImage is created there without
+  complaint yet never loads — measured, `IsLoaded` stays `false` where an
+  uploaded asset in the same container reports `true`. Assigning it blind drew
+  128 invisible cells, so the content is now probed under the real parent and
+  discarded when it does not come up.
 - Only hexagons interlock. The square fallback advances a full cell height per
   row instead of three quarters of one, which is what left it with no visible
   gaps between rows.
